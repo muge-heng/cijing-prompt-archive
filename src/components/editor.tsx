@@ -2,15 +2,20 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
   assemble,
+  assembleFormatted,
   blockLabels,
   blockTemplates,
   blockTitle,
+  estimateTokens,
+  parseVariables,
   renderPrompt,
+  renderPromptSegments,
   uid,
-  variables,
   type ArchiveData,
   type BlockPreset,
   type BuiltinBlockKind,
+  type CopyFormat,
+  type DocRevision,
   type PromptBlock,
   type PromptDoc,
   type ShelfColor,
@@ -24,20 +29,31 @@ import {
   type FullTextParseResult,
   type HeadingResolution,
 } from '@/lib/archive-markdown';
+import { docToMarkdownFile, downloadTextFile } from '@/lib/archive-io';
 import { Icon } from './icons';
 import { Dialog, Overlay } from './dialog';
 import { ArchiveSelect, type SelectOption } from './archive-select';
 import { PresetDialog, PresetManagerDialog, UnmatchedBlocksDialog } from './preset-dialog';
+import { ArchiveCardDialog, RevisionHistoryDialog } from './archive-io-dialog';
 
 export type ArchiveMutation = (body: Record<string, unknown>) => Promise<string | null>;
 export type CopyText = (text: string, message?: string) => Promise<void>;
 type WorkbenchMode = 'split' | 'edit' | 'test';
 type ComposeMode = 'blocks' | 'fulltext';
 
+const copyFormatOptions: { value: CopyFormat; label: string }[] = [
+  { value: 'markdown', label: 'Markdown' },
+  { value: 'plain', label: '纯文本' },
+  { value: 'messages', label: 'System / User' },
+];
+
 export function DocumentEditor({
   doc,
   isNew,
   data,
+  theme,
+  initialComposeMode = 'blocks',
+  initialFullText,
   mutate,
   onClose,
   notify,
@@ -46,28 +62,52 @@ export function DocumentEditor({
   doc: PromptDoc;
   isNew: boolean;
   data: ArchiveData;
+  theme: 'light' | 'dark';
+  initialComposeMode?: ComposeMode;
+  initialFullText?: string;
   mutate: ArchiveMutation;
   onClose: () => void;
   notify: (message: string) => void;
   copy: CopyText;
 }) {
   const presets = data.presets || [];
-  const [title, setTitle] = useState(doc.title),
+  const docRevisions = data.revisions?.[doc.id] || [];
+  const docTestCases = data.testCases?.[doc.id] || [];
+
+  const [savedDoc, setSavedDoc] = useState<PromptDoc>(doc),
+    [title, setTitle] = useState(doc.title),
     [synopsis, setSynopsis] = useState(doc.synopsis),
     [folderId, setFolderId] = useState(doc.folderId),
     [blocks, setBlocks] = useState<PromptBlock[]>(doc.blocks.map((b) => ({ ...b })));
   const [mode, setMode] = useState<WorkbenchMode>(() =>
       typeof window !== 'undefined' && window.innerWidth < 1024 ? 'edit' : 'split',
     ),
-    [composeMode, setComposeMode] = useState<ComposeMode>('blocks'),
-    [fullText, setFullText] = useState(() => blocksToMarkdown(doc.blocks, data.presets || [])),
-    [fullTextDirty, setFullTextDirty] = useState(false);
+    [composeMode, setComposeMode] = useState<ComposeMode>(initialComposeMode),
+    [fullText, setFullText] = useState(
+      () => initialFullText ?? blocksToMarkdown(doc.blocks, data.presets || []),
+    ),
+    [fullTextDirty, setFullTextDirty] = useState(Boolean(initialComposeMode === 'fulltext' && initialFullText));
   const [adding, setAdding] = useState(false),
     [saving, setSaving] = useState(false),
     [error, setError] = useState(''),
     [discard, setDiscard] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({}),
-    [tested, setTested] = useState(false);
+    [tested, setTested] = useState(false),
+    [copyFormat, setCopyFormat] = useState<CopyFormat>('markdown');
+  const [savingCase, setSavingCase] = useState(false),
+    [caseName, setCaseName] = useState(''),
+    [caseBusy, setCaseBusy] = useState(false);
+
+  const [dragArmedId, setDragArmedId] = useState<string | null>(null),
+    [draggingId, setDraggingId] = useState<string | null>(null),
+    [dropTarget, setDropTarget] = useState<{ id: string; position: 'before' | 'after' } | null>(null);
+
+  const [revisionModalOpen, setRevisionModalOpen] = useState(false),
+    [cardModalOpen, setCardModalOpen] = useState(false);
+
+  const blockTextareaRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map()),
+    fulltextTextareaRef = useRef<HTMLTextAreaElement>(null),
+    lastFocusTarget = useRef<string | null>(null);
 
   const [presetForm, setPresetForm] = useState<{
     preset?: BlockPreset;
@@ -89,19 +129,25 @@ export function DocumentEditor({
   const effectiveBlocks = parsedFullText ? parsedFullText.previewBlocks : blocks;
 
   const raw = assemble(effectiveBlocks, presets),
-    keys = variables(raw),
-    compiled = renderPrompt(raw, values),
-    missing = keys.filter((k) => !values[k]?.trim()),
+    rawFormatted = assembleFormatted(effectiveBlocks, presets, copyFormat),
+    varSpecs = parseVariables(raw),
+    keys = varSpecs.map((v) => v.name),
+    compiled = renderPrompt(rawFormatted, values, true),
+    compiledMarkdown = renderPrompt(raw, values, true),
+    previewSegments = renderPromptSegments(rawFormatted, values, true),
+    tokenCount = estimateTokens(compiled),
+    missingSpecs = varSpecs.filter((s) => !values[s.name]?.trim() && !s.defaultValue),
+    defaultUsedCount = varSpecs.filter((s) => !values[s.name]?.trim() && Boolean(s.defaultValue)).length,
     hasValues = keys.some((k) => Boolean(values[k]));
 
   const dirty =
-    title !== doc.title ||
-    synopsis !== doc.synopsis ||
-    folderId !== doc.folderId ||
-    JSON.stringify(effectiveBlocks) !== JSON.stringify(doc.blocks) ||
+    title !== savedDoc.title ||
+    synopsis !== savedDoc.synopsis ||
+    folderId !== savedDoc.folderId ||
+    JSON.stringify(effectiveBlocks) !== JSON.stringify(savedDoc.blocks) ||
     (composeMode === 'fulltext' &&
       fullTextDirty &&
-      fullText.trim() !== blocksToMarkdown(doc.blocks, presets).trim());
+      fullText.trim() !== blocksToMarkdown(savedDoc.blocks, presets).trim());
 
   const close = () => {
     if (saving || unmatchedBusy) return;
@@ -297,6 +343,139 @@ export function DocumentEditor({
     return () => media.removeEventListener('change', onResize);
   }, []);
 
+  useEffect(() => {
+    if (!dragArmedId) return;
+    const disarm = () => setDragArmedId(null);
+    window.addEventListener('pointerup', disarm);
+    return () => window.removeEventListener('pointerup', disarm);
+  }, [dragArmedId]);
+
+  const reorderBlock = (sourceId: string, targetId: string, position: 'before' | 'after') => {
+    if (sourceId === targetId) return;
+    setBlocks((prev) => {
+      const fromIndex = prev.findIndex((b) => b.id === sourceId);
+      if (fromIndex < 0) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      const targetIndex = next.findIndex((b) => b.id === targetId);
+      if (targetIndex < 0) return prev;
+      next.splice(position === 'after' ? targetIndex + 1 : targetIndex, 0, moved);
+      return next;
+    });
+    setTested(false);
+  };
+
+  const insertVariableToken = (token: string, selectInner?: { startOffset: number; endOffset: number }) => {
+    if (composeMode === 'fulltext') {
+      const el = fulltextTextareaRef.current;
+      const currentVal = fullText;
+      const start = el && typeof el.selectionStart === 'number' ? el.selectionStart : currentVal.length;
+      const end = el && typeof el.selectionEnd === 'number' ? el.selectionEnd : start;
+      const nextVal = `${currentVal.slice(0, start)}${token}${currentVal.slice(end)}`;
+      setFullText(nextVal);
+      setFullTextDirty(true);
+      setTested(false);
+      window.requestAnimationFrame(() => {
+        const target = fulltextTextareaRef.current;
+        if (!target) return;
+        target.focus();
+        const selStart = selectInner ? start + selectInner.startOffset : start + token.length;
+        const selEnd = selectInner ? start + selectInner.endOffset : start + token.length;
+        target.setSelectionRange(selStart, selEnd);
+      });
+      return;
+    }
+
+    const fallbackId = blocks[blocks.length - 1]?.id;
+    const targetId =
+      (lastFocusTarget.current && blocks.some((b) => b.id === lastFocusTarget.current)
+        ? lastFocusTarget.current
+        : fallbackId) || '';
+    if (!targetId) return;
+    const el = blockTextareaRefs.current.get(targetId);
+    const currentBlock = blocks.find((b) => b.id === targetId);
+    if (!currentBlock) return;
+    const currentVal = currentBlock.text;
+    const start = el && typeof el.selectionStart === 'number' ? el.selectionStart : currentVal.length;
+    const end = el && typeof el.selectionEnd === 'number' ? el.selectionEnd : start;
+    const nextVal = `${currentVal.slice(0, start)}${token}${currentVal.slice(end)}`;
+    update(targetId, nextVal);
+    window.requestAnimationFrame(() => {
+      const target = blockTextareaRefs.current.get(targetId);
+      if (!target) return;
+      target.focus();
+      const selStart = selectInner ? start + selectInner.startOffset : start + token.length;
+      const selEnd = selectInner ? start + selectInner.endOffset : start + token.length;
+      target.setSelectionRange(selStart, selEnd);
+    });
+  };
+
+  const handleSaveTestCase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = caseName.trim();
+    if (!trimmed || isNew || caseBusy) return;
+    setCaseBusy(true);
+    setError('');
+    try {
+      await mutate({
+        action: 'saveTestCase',
+        docId: doc.id,
+        name: trimmed,
+        values,
+      });
+      setCaseName('');
+      setSavingCase(false);
+      notify(`已保存样片「${trimmed}」`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存样片失败。');
+    } finally {
+      setCaseBusy(false);
+    }
+  };
+
+  const handleDeleteTestCase = async (caseId: string, name: string) => {
+    if (isNew || caseBusy) return;
+    setCaseBusy(true);
+    try {
+      await mutate({ action: 'deleteTestCase', docId: doc.id, id: caseId });
+      notify(`已移除样片「${name}」`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '删除样片失败。');
+    } finally {
+      setCaseBusy(false);
+    }
+  };
+
+  const handleExportMd = () => {
+    const markdown = docToMarkdownFile(
+      {
+        title: title.trim() || '未命名提示词',
+        synopsis: synopsis.trim(),
+        blocks: effectiveBlocks,
+      },
+      presets,
+    );
+    const filename = `${(title.trim() || 'prompt').replace(/[\\/:*?"<>|]/g, '-').slice(0, 60)}.md`;
+    downloadTextFile(filename, markdown, 'text/markdown;charset=utf-8');
+    notify('已导出为 Markdown 文件');
+  };
+
+  const handleRestoredRevision = (rev: DocRevision) => {
+    const clonedBlocks = rev.blocks.map((b) => ({ ...b }));
+    setSavedDoc((prev) => ({
+      ...prev,
+      title: rev.title,
+      synopsis: rev.synopsis,
+      blocks: clonedBlocks.map((b) => ({ ...b })),
+    }));
+    setTitle(rev.title);
+    setSynopsis(rev.synopsis);
+    setBlocks(clonedBlocks);
+    setFullText(blocksToMarkdown(clonedBlocks, presets));
+    setFullTextDirty(false);
+    setTested(false);
+  };
+
   const update = (id: string, text: string) => {
     setBlocks((bs) => bs.map((b) => (b.id === id ? { ...b, text } : b)));
     setTested(false);
@@ -369,6 +548,18 @@ export function DocumentEditor({
                 <i />
                 {dirty ? '尚未保存' : isNew ? '新草稿' : '已归档'}
               </span>
+              {!isNew && (
+                <button
+                  type="button"
+                  className="revision-trigger-btn"
+                  onClick={() => setRevisionModalOpen(true)}
+                  title="查看历史修订签与版本对比"
+                >
+                  <Icon name="history" size={12} />
+                  <span>修订签</span>
+                  {docRevisions.length > 0 && <small>{docRevisions.length}</small>}
+                </button>
+              )}
             </div>
 
             <div className="editor-top-right">
@@ -485,6 +676,36 @@ export function DocumentEditor({
                   </button>
                 </div>
 
+                <div className="var-quick-bar" aria-label="快捷变量插入">
+                  <span className="var-quick-label">
+                    <Icon name="variable" size={12} />
+                    快捷变量
+                  </span>
+                  <div className="var-quick-pills">
+                    {varSpecs.map((spec) => (
+                      <button
+                        type="button"
+                        key={spec.name}
+                        className="var-pill"
+                        title={spec.defaultValue ? `默认值：${spec.defaultValue}` : `插入 {{${spec.name}}}`}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => insertVariableToken(`{{${spec.name}}}`)}
+                      >
+                        {`{{${spec.name}}}`}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className="var-pill is-add"
+                      title="在光标处插入带默认值的占位变量"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => insertVariableToken('{{变量名:默认值}}', { startOffset: 2, endOffset: 9 })}
+                    >
+                      + 新变量
+                    </button>
+                  </div>
+                </div>
+
                 {composeMode === 'blocks' ? (
                   <>
                     <div className="mini-section">
@@ -503,12 +724,63 @@ export function DocumentEditor({
                           !isBuiltinLabelCollision(label) &&
                           !presets.some((p) => p.id === block.presetId || normalizeHeading(p.name).toLowerCase() === normLabel);
 
+                        const isDropBefore =
+                          dropTarget?.id === block.id && dropTarget.position === 'before';
+                        const isDropAfter =
+                          dropTarget?.id === block.id && dropTarget.position === 'after';
+
                         return (
                           <section
-                            className={`prompt-block block-${block.kind} ${isCustom ? `tone-${block.color || 'ochre'}` : ''}`}
+                            className={`prompt-block block-${block.kind} ${isCustom ? `tone-${block.color || 'ochre'}` : ''} ${draggingId === block.id ? 'is-dragging' : ''} ${isDropBefore ? 'is-drop-before' : ''} ${isDropAfter ? 'is-drop-after' : ''}`}
                             key={block.id}
+                            draggable={dragArmedId === block.id}
+                            onDragStart={(e) => {
+                              setDraggingId(block.id);
+                              e.dataTransfer.effectAllowed = 'move';
+                              e.dataTransfer.setData('text/plain', block.id);
+                            }}
+                            onDragOver={(e) => {
+                              if (!draggingId || draggingId === block.id) return;
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = 'move';
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const pos = e.clientY - rect.top < rect.height / 2 ? 'before' : 'after';
+                              setDropTarget((prev) =>
+                                prev?.id === block.id && prev.position === pos
+                                  ? prev
+                                  : { id: block.id, position: pos },
+                              );
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              if (!draggingId || draggingId === block.id) return;
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const pos =
+                                dropTarget?.id === block.id
+                                  ? dropTarget.position
+                                  : e.clientY - rect.top < rect.height / 2
+                                    ? 'before'
+                                    : 'after';
+                              reorderBlock(draggingId, block.id, pos);
+                              setDraggingId(null);
+                              setDropTarget(null);
+                              setDragArmedId(null);
+                            }}
+                            onDragEnd={() => {
+                              setDraggingId(null);
+                              setDropTarget(null);
+                              setDragArmedId(null);
+                            }}
                           >
                             <div className="block-heading">
+                              <span
+                                className="block-drag-handle"
+                                title="按住拖拽排序"
+                                aria-hidden="true"
+                                onPointerDown={() => setDragArmedId(block.id)}
+                              >
+                                <Icon name="grip" size={13} />
+                              </span>
                               <span className="block-number">{String(i + 1).padStart(2, '0')}</span>
                               <strong>{label}</strong>
                               {isCustom && <span className="custom-block-tag">自定义</span>}
@@ -561,11 +833,18 @@ export function DocumentEditor({
                               </div>
                             </div>
                             <textarea
+                              ref={(el) => {
+                                if (el) blockTextareaRefs.current.set(block.id, el);
+                                else blockTextareaRefs.current.delete(block.id);
+                              }}
                               aria-label={`${label}内容`}
                               value={block.text}
                               rows={Math.min(10, Math.max(3, Math.ceil(block.text.length / 44)))}
                               maxLength={30000}
-                              placeholder="写下模块内容，用 {{变量名}} 保留可替换的位置…"
+                              placeholder="写下模块内容，用 {{变量名}} 或 {{变量名:默认值}} 保留可替换字段…"
+                              onFocus={() => {
+                                lastFocusTarget.current = block.id;
+                              }}
                               onChange={(e) => update(block.id, e.target.value)}
                             />
                           </section>
@@ -664,13 +943,17 @@ export function DocumentEditor({
                       <span className="subtle">使用 ## 标题 自动识别并匹配模块</span>
                     </div>
                     <textarea
+                      ref={fulltextTextareaRef}
                       className="field fulltext-textarea"
                       aria-label="完整提示词输入"
                       rows={16}
                       value={fullText}
                       placeholder={
-                        '可直接粘贴或一次编写完整提示词，例如：\n\n## 角色设定\n你是一位资深产品文案编辑。\n\n## 任务描述\n围绕「{{主题}}」撰写一段产品介绍。\n\n## 示例参考\n（未匹配到的标题将在同步或保存时提示快速新建为模块或预设）'
+                        '可直接粘贴或一次编写完整提示词，例如：\n\n## 角色设定\n你是一位资深产品文案编辑。\n\n## 任务描述\n围绕「{{主题:新品发布}}」撰写一段产品介绍。\n\n## 示例参考\n（未匹配到的标题将在同步或保存时提示快速新建为模块或预设）'
                       }
+                      onFocus={() => {
+                        lastFocusTarget.current = 'fulltext';
+                      }}
                       onChange={(e) => {
                         setFullText(e.target.value);
                         setFullTextDirty(true);
@@ -756,23 +1039,90 @@ export function DocumentEditor({
                   </div>
                   <div className="debug-pill">
                     <Icon name="test" size={14} />
-                    <span>本地离线编译 · 参数与文本不会发送给外部模型</span>
+                    <span>支持 {'{{变量:默认值}}'} 语法 · 参数与文本仅在本地编译</span>
                   </div>
-                  {keys.length ? (
+                  {varSpecs.length > 0 && (
+                    <div className="testcase-bar">
+                      <div className="testcase-head">
+                        <span>调试样片</span>
+                        {!isNew ? (
+                          <button
+                            type="button"
+                            className="text-button"
+                            onClick={() => setSavingCase((v) => !v)}
+                          >
+                            {savingCase ? '收起' : '+ 存为样片'}
+                          </button>
+                        ) : (
+                          <small className="testcase-draft-hint">保存文档后可留存样片</small>
+                        )}
+                      </div>
+                      {docTestCases.length > 0 && (
+                        <div className="testcase-pills">
+                          {docTestCases.map((tc) => (
+                            <span className="testcase-pill" key={tc.id}>
+                              <button
+                                type="button"
+                                className="testcase-apply-btn"
+                                onClick={() => {
+                                  setValues({ ...tc.values });
+                                  setTested(false);
+                                  notify(`已载入样片「${tc.name}」`);
+                                }}
+                              >
+                                <Icon name="tag" size={11} />
+                                {tc.name}
+                              </button>
+                              <button
+                                type="button"
+                                className="testcase-del-btn"
+                                aria-label={`删除样片${tc.name}`}
+                                disabled={caseBusy}
+                                onClick={() => void handleDeleteTestCase(tc.id, tc.name)}
+                              >
+                                <Icon name="close" size={10} />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {savingCase && !isNew && (
+                        <form className="testcase-save-form" onSubmit={handleSaveTestCase}>
+                          <input
+                            className="field"
+                            maxLength={24}
+                            value={caseName}
+                            onChange={(e) => setCaseName(e.target.value)}
+                            placeholder="样片名称，如：赛博书店 / 学术场景"
+                            required
+                          />
+                          <button type="submit" className="button small primary" disabled={caseBusy}>
+                            {caseBusy ? '保存中…' : '保存'}
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  )}
+                  {varSpecs.length ? (
                     <div className="variable-list">
-                      {keys.map((k) => (
-                        <label className="field-label variable-field" key={k}>
+                      {varSpecs.map((spec) => (
+                        <label className="field-label variable-field" key={spec.name}>
                           <span>
                             <Icon name="variable" size={13} />
-                            {k}
+                            {spec.name}
+                            {spec.defaultValue && (
+                              <em className="var-default-badge" title={`未填写时默认使用「${spec.defaultValue}」`}>
+                                默认：{spec.defaultValue}
+                              </em>
+                            )}
                           </span>
                           <textarea
                             className="field"
                             rows={2}
-                            placeholder={`输入${k}…`}
-                            value={values[k] || ''}
+                            placeholder={spec.defaultValue || `输入${spec.name}…`}
+                            value={values[spec.name] || ''}
                             onChange={(e) => {
-                              setValues((v) => ({ ...v, [k]: e.target.value }));
+                              setValues((v) => ({ ...v, [spec.name]: e.target.value }));
                               setTested(false);
                             }}
                           />
@@ -781,17 +1131,17 @@ export function DocumentEditor({
                     </div>
                   ) : (
                     <p className="debug-empty">
-                      这份提示词暂未包含变量。可在模块中添加 {'{{主题}}'} 等占位符以进行参数化调试。
+                      这份提示词暂未包含变量。可在模块中添加 {'{{主题}}'} 或 {'{{主题:默认值}}'} 进行参数化调试。
                     </p>
                   )}
                   {tested && (
-                    <div className={`debug-report ${missing.length || !raw ? 'warning' : ''}`} role="status">
-                      <Icon name={missing.length || !raw ? 'info' : 'check'} size={16} />
+                    <div className={`debug-report ${missingSpecs.length || !raw ? 'warning' : ''}`} role="status">
+                      <Icon name={missingSpecs.length || !raw ? 'info' : 'check'} size={16} />
                       {!raw
                         ? '提示词内容为空，请先编写模块。'
-                        : missing.length
-                          ? `还有 ${missing.length} 个变量未填写：${missing.join('、')}`
-                          : `检查通过 · ${keys.length} 个变量已解析，${compiled.length} 个字符。`}
+                        : missingSpecs.length
+                          ? `还有 ${missingSpecs.length} 个未设默认值的变量待填写：${missingSpecs.map((s) => s.name).join('、')}`
+                          : `检查通过 · ${keys.length} 个变量已解析${defaultUsedCount ? `（含 ${defaultUsedCount} 个默认值）` : ''}，${compiled.length} 字 · 约 ${tokenCount} tokens。`}
                     </div>
                   )}
                 </div>
@@ -799,22 +1149,69 @@ export function DocumentEditor({
                 <div className="workbench-paper-section">
                   <div className="workbench-paper-head">
                     <h3>
-                      成稿预览 <span>{compiled.length} 字</span>
+                      成稿预览{' '}
+                      <span title="按中文约 0.8 token/字、英文约 1 token/3.8 字符估算">
+                        {compiled.length} 字 · ~{tokenCount} tok
+                      </span>
                     </h3>
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => void copy(compiled, '调试结果已复制')}
-                    >
-                      <Icon name="copy" size={13} />
-                      复制结果
-                    </button>
+                    <div className="workbench-paper-tools">
+                      <div className="copy-format-switch" role="radiogroup" aria-label="输出格式">
+                        {copyFormatOptions.map((opt) => (
+                          <button
+                            type="button"
+                            key={opt.value}
+                            role="radio"
+                            aria-checked={copyFormat === opt.value}
+                            className={copyFormat === opt.value ? 'selected' : ''}
+                            onClick={() => setCopyFormat(opt.value)}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() =>
+                          void copy(
+                            compiled,
+                            copyFormat === 'markdown'
+                              ? '调试结果已复制'
+                              : `调试结果已按「${copyFormatOptions.find((o) => o.value === copyFormat)?.label}」格式复制`,
+                          )
+                        }
+                      >
+                        <Icon name="copy" size={13} />
+                        复制结果
+                      </button>
+                    </div>
                   </div>
                   <pre className="preview-paper" style={{ '--paper-pad': '19px' } as CSSProperties}>
-                    {compiled
-                      ? compiled
-                          .split(/(\{\{[^{}]+\}\})/g)
-                          .map((p, i) => (p.startsWith('{{') ? <mark key={i}>{p}</mark> : p))
+                    {previewSegments.length
+                      ? previewSegments.map((seg, i) => {
+                          if (seg.kind === 'filled') {
+                            return (
+                              <mark key={i} className="var-filled" title={`已填入「${seg.varName}」`}>
+                                {seg.text}
+                              </mark>
+                            );
+                          }
+                          if (seg.kind === 'default') {
+                            return (
+                              <mark key={i} className="var-default" title={`使用「${seg.varName}」默认值`}>
+                                {seg.text}
+                              </mark>
+                            );
+                          }
+                          if (seg.kind === 'unresolved') {
+                            return (
+                              <mark key={i} className="var-missing" title={`待填写变量「${seg.varName}」`}>
+                                {seg.text}
+                              </mark>
+                            );
+                          }
+                          return seg.text;
+                        })
                       : '等待输入提示词内容…'}
                   </pre>
                 </div>
@@ -831,7 +1228,7 @@ export function DocumentEditor({
 
         <footer className="editor-footer">
           <span className="editor-count">
-            {effectiveBlocks.length} 个模块 <b>·</b> {raw.length} 字符
+            {effectiveBlocks.length} 个模块 <b>·</b> {raw.length} 字符 <b>·</b> ~{estimateTokens(raw)} tok
             {keys.length > 0 && (
               <>
                 {' '}
@@ -840,7 +1237,36 @@ export function DocumentEditor({
             )}
             <span className="editor-shortcut-hint">⌘ / Ctrl + S 保存</span>
           </span>
-          <button type="button" className="button" onClick={() => void copy(mode === 'test' ? compiled : raw)}>
+          <button
+            type="button"
+            className="button footer-extra-btn"
+            onClick={handleExportMd}
+            title="导出为 .md 文件"
+          >
+            <Icon name="download" size={14} />
+            <span>导出 .md</span>
+          </button>
+          <button
+            type="button"
+            className="button footer-extra-btn"
+            onClick={() => setCardModalOpen(true)}
+            title="生成复古馆藏卡片 PNG"
+          >
+            <Icon name="image" size={14} />
+            <span>馆藏卡片</span>
+          </button>
+          <button
+            type="button"
+            className="button"
+            onClick={() =>
+              void copy(
+                mode === 'test' ? compiled : rawFormatted,
+                copyFormat === 'markdown'
+                  ? undefined
+                  : `已按「${copyFormatOptions.find((o) => o.value === copyFormat)?.label}」格式复制`,
+              )
+            }
+          >
             <Icon name="copy" size={15} />
             复制{mode === 'test' ? '结果' : '全文'}
           </button>
@@ -939,6 +1365,37 @@ export function DocumentEditor({
           error={unmatchedError}
           onClose={() => setUnmatchedModal(null)}
           onConfirm={handleConfirmUnmatched}
+        />
+      )}
+
+      {revisionModalOpen && !isNew && (
+        <RevisionHistoryDialog
+          docId={doc.id}
+          revisions={docRevisions}
+          currentTitle={title}
+          currentSynopsis={synopsis}
+          currentBlocks={effectiveBlocks}
+          presets={presets}
+          mutate={mutate}
+          onClose={() => setRevisionModalOpen(false)}
+          onRestored={handleRestoredRevision}
+          notify={notify}
+        />
+      )}
+
+      {cardModalOpen && (
+        <ArchiveCardDialog
+          initialTheme={theme}
+          title={title.trim() || '未命名提示词'}
+          synopsis={synopsis.trim()}
+          shelfName={shelf?.name || '个人词库'}
+          folderName={folder?.name || '收件夹'}
+          shelfColor={shelf?.color || 'moss'}
+          templateText={raw}
+          compiledText={compiledMarkdown}
+          blockCount={effectiveBlocks.length}
+          onClose={() => setCardModalOpen(false)}
+          notify={notify}
         />
       )}
 

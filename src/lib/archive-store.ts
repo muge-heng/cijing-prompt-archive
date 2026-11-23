@@ -1,8 +1,18 @@
-import { asc, desc, eq, sql } from 'drizzle-orm';
+import { asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { archiveMeta, shelves, folders, documents } from '@/db/schema';
 import { initialArchive } from './archive-seed';
 import { isBuiltinLabelCollision, normalizeHeading } from './archive-markdown';
+import {
+  docContentChanged,
+  mergeArchives,
+  normalizeArchivePayload,
+  prependDocRevision,
+  removeDocMetaForIds,
+  sanitizeRevisionsMap,
+  sanitizeTestCasesMap,
+  upsertTestCaseList,
+} from './archive-io';
 import {
   isBuiltinBlockKind,
   uid,
@@ -13,6 +23,8 @@ import {
 } from './archive-types';
 
 const PRESETS_META_KEY = 'block_presets';
+const REVISIONS_META_KEY = 'doc_revisions';
+const TEST_CASES_META_KEY = 'doc_test_cases';
 
 let initialized: Promise<void> | undefined;
 async function seedOnce() {
@@ -34,14 +46,61 @@ async function seedOnce() {
       });
   return initialized;
 }
-function parsePresets(raw: string | undefined): BlockPreset[] {
-  if (!raw) return [];
+function parseMetaJson<T>(raw: string | undefined, fallback: T): T {
+  if (!raw) return fallback;
   try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as BlockPreset[]) : [];
+    return JSON.parse(raw) as T;
   } catch {
-    return [];
+    return fallback;
   }
+}
+function parsePresets(raw: string | undefined): BlockPreset[] {
+  const parsed = parseMetaJson<unknown>(raw, []);
+  return Array.isArray(parsed) ? (parsed as BlockPreset[]) : [];
+}
+type DbTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+async function upsertMetaValue(tx: DbTx, key: string, value: unknown) {
+  const serialized = JSON.stringify(value);
+  await tx
+    .insert(archiveMeta)
+    .values({ key, value: serialized })
+    .onConflictDoUpdate({
+      target: archiveMeta.key,
+      set: { value: serialized },
+    });
+}
+async function readMetaMap(tx: DbTx, keys: string[]) {
+  const rows = await tx.select().from(archiveMeta).where(inArray(archiveMeta.key, keys));
+  return new Map(rows.map((r) => [r.key, r.value]));
+}
+async function applyFullArchiveInTx(tx: DbTx, next: ArchiveData) {
+  await tx.delete(documents);
+  await tx.delete(folders);
+  await tx.delete(shelves);
+  if (next.shelves.length) {
+    await tx.insert(shelves).values(next.shelves);
+  }
+  if (next.folders.length) {
+    await tx.insert(folders).values(next.folders);
+  }
+  if (next.documents.length) {
+    await tx.insert(documents).values(
+      next.documents.map((d) => ({
+        id: d.id,
+        folderId: d.folderId,
+        title: d.title,
+        synopsis: d.synopsis,
+        blocks: d.blocks,
+        favorite: d.favorite,
+        createdAt: d.createdAt,
+        updatedAt: d.updatedAt,
+        lastOpened: d.lastOpened,
+      })),
+    );
+  }
+  await upsertMetaValue(tx, PRESETS_META_KEY, next.presets || []);
+  await upsertMetaValue(tx, REVISIONS_META_KEY, next.revisions || {});
+  await upsertMetaValue(tx, TEST_CASES_META_KEY, next.testCases || {});
 }
 export async function readArchive(): Promise<ArchiveData> {
   await seedOnce();
@@ -49,9 +108,21 @@ export async function readArchive(): Promise<ArchiveData> {
     db.select().from(shelves).orderBy(asc(shelves.position), asc(shelves.id)),
     db.select().from(folders).orderBy(asc(folders.position), asc(folders.id)),
     db.select().from(documents).orderBy(desc(documents.updatedAt)),
-    db.select().from(archiveMeta).where(eq(archiveMeta.key, PRESETS_META_KEY)).limit(1),
+    db
+      .select()
+      .from(archiveMeta)
+      .where(inArray(archiveMeta.key, [PRESETS_META_KEY, REVISIONS_META_KEY, TEST_CASES_META_KEY])),
   ]);
-  return { shelves: s, folders: f, documents: d, presets: parsePresets(metaRows[0]?.value) };
+  const metaMap = new Map(metaRows.map((r) => [r.key, r.value]));
+  const validDocIds = new Set(d.map((doc) => doc.id));
+  return {
+    shelves: s,
+    folders: f,
+    documents: d,
+    presets: parsePresets(metaMap.get(PRESETS_META_KEY)),
+    revisions: sanitizeRevisionsMap(parseMetaJson(metaMap.get(REVISIONS_META_KEY), {}), validDocIds),
+    testCases: sanitizeTestCasesMap(parseMetaJson(metaMap.get(TEST_CASES_META_KEY), {}), validDocIds),
+  };
 }
 // Capture the collection and its reference clock together, once per server request.
 export async function readWorkspaceSnapshot() {
@@ -160,24 +231,146 @@ export async function mutateArchive(value: unknown): Promise<string | null> {
       await db.select({ id: folders.id }).from(folders).where(eq(folders.id, folderId)).limit(1),
       '文件夹',
     );
+    const nowIso = new Date().toISOString();
     const data = {
       folderId,
       title: text(b.title, '文档标题', 100),
       synopsis: text(b.synopsis, '摘要', 300, true),
       blocks: blocks(b.blocks),
-      updatedAt: new Date().toISOString(),
+      updatedAt: nowIso,
     };
     if (b.id) {
       const id = text(b.id, '文档编号', 100);
-      exists(
-        await db.update(documents).set(data).where(eq(documents.id, id)).returning({ id: documents.id }),
-        '文档',
-      );
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(71120319)`);
+        const [existing] = await tx.select().from(documents).where(eq(documents.id, id)).limit(1);
+        exists(existing ? [existing] : [], '文档');
+        if (docContentChanged(existing, data)) {
+          const metaMap = await readMetaMap(tx, [REVISIONS_META_KEY]);
+          const revisions = sanitizeRevisionsMap(parseMetaJson(metaMap.get(REVISIONS_META_KEY), {}));
+          await upsertMetaValue(tx, REVISIONS_META_KEY, prependDocRevision(revisions, existing, nowIso));
+        }
+        await tx.update(documents).set(data).where(eq(documents.id, id));
+      });
       return id;
     }
     const id = uid();
     await db.insert(documents).values({ ...data, id });
     return id;
+  }
+  if (b.action === 'importArchive') {
+    const mode = b.mode === 'replace' ? 'replace' : 'merge';
+    let incoming: ArchiveData;
+    try {
+      incoming = normalizeArchivePayload(b.archive);
+    } catch (err) {
+      throw new InputError(err instanceof Error ? err.message : '导入数据格式无效。');
+    }
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(71120318)`);
+      await tx.execute(sql`select pg_advisory_xact_lock(71120319)`);
+      if (mode === 'replace') {
+        await applyFullArchiveInTx(tx, incoming);
+      } else {
+        const [s, f, d, metaMap] = await Promise.all([
+          tx.select().from(shelves).orderBy(asc(shelves.position), asc(shelves.id)),
+          tx.select().from(folders).orderBy(asc(folders.position), asc(folders.id)),
+          tx.select().from(documents).orderBy(desc(documents.updatedAt)),
+          readMetaMap(tx, [PRESETS_META_KEY, REVISIONS_META_KEY, TEST_CASES_META_KEY]),
+        ]);
+        const validIds = new Set(d.map((doc) => doc.id));
+        const current: ArchiveData = {
+          shelves: s,
+          folders: f,
+          documents: d,
+          presets: parsePresets(metaMap.get(PRESETS_META_KEY)),
+          revisions: sanitizeRevisionsMap(parseMetaJson(metaMap.get(REVISIONS_META_KEY), {}), validIds),
+          testCases: sanitizeTestCasesMap(parseMetaJson(metaMap.get(TEST_CASES_META_KEY), {}), validIds),
+        };
+        await applyFullArchiveInTx(tx, mergeArchives(current, incoming));
+      }
+    });
+    return null;
+  }
+  if (b.action === 'resetArchive') {
+    const fresh = initialArchive();
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(71120318)`);
+      await tx.execute(sql`select pg_advisory_xact_lock(71120319)`);
+      await applyFullArchiveInTx(tx, { ...fresh, revisions: {}, testCases: {} });
+    });
+    return null;
+  }
+  if (b.action === 'restoreRevision') {
+    const docId = text(b.docId, '文档编号', 100);
+    const revisionId = text(b.revisionId, '修订版本编号', 100);
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(71120319)`);
+      const [doc] = await tx.select().from(documents).where(eq(documents.id, docId)).limit(1);
+      exists(doc ? [doc] : [], '文档');
+      const metaMap = await readMetaMap(tx, [REVISIONS_META_KEY]);
+      const revisions = sanitizeRevisionsMap(parseMetaJson(metaMap.get(REVISIONS_META_KEY), {}));
+      const rev = (revisions[docId] || []).find((r) => r.id === revisionId);
+      exists(rev ? [rev] : [], '修订记录');
+      const nowIso = new Date().toISOString();
+      await upsertMetaValue(tx, REVISIONS_META_KEY, prependDocRevision(revisions, doc, nowIso));
+      await tx
+        .update(documents)
+        .set({
+          title: rev!.title,
+          synopsis: rev!.synopsis,
+          blocks: rev!.blocks,
+          updatedAt: nowIso,
+        })
+        .where(eq(documents.id, docId));
+    });
+    return docId;
+  }
+  if (b.action === 'saveTestCase') {
+    const docId = text(b.docId, '文档编号', 100);
+    const name = text(b.name, '样片名称', 24);
+    const caseId =
+      b.id !== undefined && b.id !== null && b.id !== '' ? text(b.id, '样片编号', 100) : undefined;
+    if (!b.values || typeof b.values !== 'object' || Array.isArray(b.values)) {
+      throw new InputError('样片参数格式无效。');
+    }
+    let savedId = '';
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(71120319)`);
+      const [doc] = await tx.select({ id: documents.id }).from(documents).where(eq(documents.id, docId)).limit(1);
+      exists(doc ? [doc] : [], '文档');
+      const metaMap = await readMetaMap(tx, [TEST_CASES_META_KEY]);
+      const testCases = sanitizeTestCasesMap(parseMetaJson(metaMap.get(TEST_CASES_META_KEY), {}));
+      try {
+        const updated = upsertTestCaseList(testCases[docId], {
+          id: caseId,
+          name,
+          values: b.values as Record<string, string>,
+        });
+        savedId = updated.id;
+        await upsertMetaValue(tx, TEST_CASES_META_KEY, { ...testCases, [docId]: updated.list });
+      } catch (err) {
+        throw new InputError(err instanceof Error ? err.message : '保存样片失败。');
+      }
+    });
+    return savedId;
+  }
+  if (b.action === 'deleteTestCase') {
+    const docId = text(b.docId, '文档编号', 100);
+    const caseId = text(b.id, '样片编号', 100);
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(71120319)`);
+      const metaMap = await readMetaMap(tx, [TEST_CASES_META_KEY]);
+      const testCases = sanitizeTestCasesMap(parseMetaJson(metaMap.get(TEST_CASES_META_KEY), {}));
+      const list = testCases[docId] || [];
+      exists(list.some((tc) => tc.id === caseId) ? [caseId] : [], '调试样片');
+      const nextList = list.filter((tc) => tc.id !== caseId);
+      const nextMap = { ...testCases };
+      if (nextList.length) nextMap[docId] = nextList;
+      else delete nextMap[docId];
+      await upsertMetaValue(tx, TEST_CASES_META_KEY, nextMap);
+    });
+    return caseId;
   }
   if (b.action === 'createPreset') {
     const name = text(b.name, '板块名称', 24);
@@ -284,7 +477,18 @@ export async function mutateArchive(value: unknown): Promise<string | null> {
       return newId;
     }
     case 'deleteDoc':
-      exists(await db.delete(documents).where(eq(documents.id, id)).returning({ id: documents.id }), '文档');
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(71120319)`);
+        exists(await tx.delete(documents).where(eq(documents.id, id)).returning({ id: documents.id }), '文档');
+        const metaMap = await readMetaMap(tx, [REVISIONS_META_KEY, TEST_CASES_META_KEY]);
+        const cleaned = removeDocMetaForIds(
+          sanitizeRevisionsMap(parseMetaJson(metaMap.get(REVISIONS_META_KEY), {})),
+          sanitizeTestCasesMap(parseMetaJson(metaMap.get(TEST_CASES_META_KEY), {})),
+          [id],
+        );
+        await upsertMetaValue(tx, REVISIONS_META_KEY, cleaned.revisions);
+        await upsertMetaValue(tx, TEST_CASES_META_KEY, cleaned.testCases);
+      });
       break;
     case 'updateShelf':
       exists(
@@ -314,10 +518,48 @@ export async function mutateArchive(value: unknown): Promise<string | null> {
       );
       break;
     case 'deleteShelf':
-      exists(await db.delete(shelves).where(eq(shelves.id, id)).returning({ id: shelves.id }), '货架');
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(71120319)`);
+        const shelfFolders = await tx
+          .select({ id: folders.id })
+          .from(folders)
+          .where(eq(folders.shelfId, id));
+        const folderIds = shelfFolders.map((f) => f.id);
+        const docRows = folderIds.length
+          ? await tx.select({ id: documents.id }).from(documents).where(inArray(documents.folderId, folderIds))
+          : [];
+        exists(await tx.delete(shelves).where(eq(shelves.id, id)).returning({ id: shelves.id }), '货架');
+        if (docRows.length) {
+          const metaMap = await readMetaMap(tx, [REVISIONS_META_KEY, TEST_CASES_META_KEY]);
+          const cleaned = removeDocMetaForIds(
+            sanitizeRevisionsMap(parseMetaJson(metaMap.get(REVISIONS_META_KEY), {})),
+            sanitizeTestCasesMap(parseMetaJson(metaMap.get(TEST_CASES_META_KEY), {})),
+            docRows.map((d) => d.id),
+          );
+          await upsertMetaValue(tx, REVISIONS_META_KEY, cleaned.revisions);
+          await upsertMetaValue(tx, TEST_CASES_META_KEY, cleaned.testCases);
+        }
+      });
       break;
     case 'deleteFolder':
-      exists(await db.delete(folders).where(eq(folders.id, id)).returning({ id: folders.id }), '文件夹');
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`select pg_advisory_xact_lock(71120319)`);
+        const docRows = await tx
+          .select({ id: documents.id })
+          .from(documents)
+          .where(eq(documents.folderId, id));
+        exists(await tx.delete(folders).where(eq(folders.id, id)).returning({ id: folders.id }), '文件夹');
+        if (docRows.length) {
+          const metaMap = await readMetaMap(tx, [REVISIONS_META_KEY, TEST_CASES_META_KEY]);
+          const cleaned = removeDocMetaForIds(
+            sanitizeRevisionsMap(parseMetaJson(metaMap.get(REVISIONS_META_KEY), {})),
+            sanitizeTestCasesMap(parseMetaJson(metaMap.get(TEST_CASES_META_KEY), {})),
+            docRows.map((d) => d.id),
+          );
+          await upsertMetaValue(tx, REVISIONS_META_KEY, cleaned.revisions);
+          await upsertMetaValue(tx, TEST_CASES_META_KEY, cleaned.testCases);
+        }
+      });
       break;
     default:
       throw new InputError('不支持的仓库操作。');

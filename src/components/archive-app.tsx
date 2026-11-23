@@ -1,7 +1,8 @@
 'use client';
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { assemble, uid, type ArchiveData, type PromptDoc } from '@/lib/archive-types';
-import { mutateLocalArchive, readLocalArchive } from '@/lib/archive-local-store';
+import { getLocalArchiveBytes, mutateLocalArchive, readLocalArchive } from '@/lib/archive-local-store';
+import { docToMarkdownFile, downloadTextFile, parseImportedMarkdownFile } from '@/lib/archive-io';
 import { archiveDate } from '@/lib/archive-dates';
 import { ArchiveMark, Icon, type IconName } from './icons';
 import { ShelfCard } from './shelf-card';
@@ -9,6 +10,7 @@ import { DocumentList } from './document-list';
 import { DocumentEditor } from './editor';
 import { Dialog } from './dialog';
 import { ArchiveSelect } from './archive-select';
+import { ArchiveBackupDialog, ArchiveCardDialog } from './archive-io-dialog';
 import {
   EntityDialog,
   SearchDialog,
@@ -66,9 +68,15 @@ export function ArchiveApp({
     [route, setView] = useState<View>(initialView),
     [mobileNav, setMobileNav] = useState(false);
   const view = resolveView(route.kind, route.id, data);
-  const [modal, setModal] = useState<'search' | 'settings' | null>(null),
+  const [modal, setModal] = useState<'search' | 'settings' | 'backup' | null>(null),
     [entity, setEntity] = useState<EntityForm | null>(null),
-    [editor, setEditor] = useState<{ doc: PromptDoc; isNew: boolean } | null>(null),
+    [editor, setEditor] = useState<{
+      doc: PromptDoc;
+      isNew: boolean;
+      initialComposeMode?: 'blocks' | 'fulltext';
+      initialFullText?: string;
+    } | null>(null),
+    [cardDoc, setCardDoc] = useState<PromptDoc | null>(null),
     [confirm, setConfirm] = useState<Confirm | null>(null),
     [confirmBusy, setConfirmBusy] = useState(false);
   const [prefs, setPrefs] = useState<Preferences>(defaults),
@@ -88,6 +96,7 @@ export function ArchiveApp({
     [viewTransition, setViewTransition] = useState<ViewTransition>('none');
   const messageTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null),
+    mdImportInputRef = useRef<HTMLInputElement>(null),
     sequence = useRef(0),
     lastApplied = useRef(0),
     pendingStars = useRef(new Set<string>());
@@ -404,11 +413,53 @@ export function ArchiveApp({
     });
     setMobileNav(false);
   };
+  const openImportedMarkdown = (parsed: { title: string; synopsis: string; body: string }) => {
+    const target = folder || data.folders.find((f) => f.shelfId === shelf?.id) || data.folders[0];
+    if (!target) {
+      notify('请先创建一个货架和文件夹再导入提示词');
+      return;
+    }
+    const date = new Date().toISOString();
+    setModal(null);
+    setProfileMenu(false);
+    setMobileNav(false);
+    setEditor({
+      isNew: true,
+      initialComposeMode: 'fulltext',
+      initialFullText: parsed.body,
+      doc: {
+        id: uid(),
+        title: parsed.title,
+        synopsis: parsed.synopsis,
+        folderId: target.id,
+        blocks: [{ id: uid(), kind: 'task', text: parsed.body || ' ' }],
+        favorite: false,
+        updatedAt: date,
+        createdAt: date,
+        lastOpened: null,
+      },
+    });
+    notify(`已载入「${parsed.title}」，请在工作台确认模块匹配`);
+  };
+  const handleMarkdownFileSelected = async (file: File) => {
+    try {
+      const content = await file.text();
+      openImportedMarkdown(parseImportedMarkdownFile(file.name, content));
+    } catch {
+      notify('读取 Markdown 文件失败');
+    }
+  };
+  const localBytes =
+    typeof window !== 'undefined' && isStaticMode && (profileMenu || modal === 'backup')
+      ? getLocalArchiveBytes()
+      : 0;
+  const formattedLocalBytes =
+    localBytes < 1024 ? `${localBytes} B` : `${(localBytes / 1024).toFixed(1)} KB`;
   const openMenu = (doc: PromptDoc, rect: DOMRect) =>
     setMenu({
       doc,
       x: Math.max(12, Math.min(window.innerWidth - 190, rect.right - 182)),
-      y: Math.max(12, Math.min(window.innerHeight - 205, rect.bottom + 5)),
+      y: Math.max(12, Math.min(window.innerHeight - 275, rect.bottom + 5)),
     });
   const favoriteCount = data.documents.filter((d) => d.favorite).length,
     date = archiveDate(now);
@@ -664,6 +715,30 @@ export function ArchiveApp({
                   className="workspace-popover-item"
                   onClick={() => {
                     setProfileMenu(false);
+                    setModal('backup');
+                  }}
+                >
+                  <Icon name="download" size={15} />
+                  馆藏备份与导入
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="workspace-popover-item"
+                  onClick={() => {
+                    setProfileMenu(false);
+                    mdImportInputRef.current?.click();
+                  }}
+                >
+                  <Icon name="file" size={15} />
+                  导入 Markdown 文档
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="workspace-popover-item"
+                  onClick={() => {
+                    setProfileMenu(false);
                     changePrefs({ ...prefs, compactIndex: !prefs.compactIndex });
                   }}
                 >
@@ -683,7 +758,7 @@ export function ArchiveApp({
                   仓库偏好设置
                 </button>
                 <div className="workspace-popover-meta">
-                  <span>{isStaticMode ? '浏览器本地存储模式' : 'PostgreSQL 仓库已连接'}</span>
+                  <span>{isStaticMode ? `本地缓存 · ${formattedLocalBytes}` : 'PostgreSQL 仓库已连接'}</span>
                 </div>
               </div>
             </>
@@ -1080,17 +1155,63 @@ export function ArchiveApp({
           onDelete={formDelete}
         />
       )}
+      {modal === 'backup' && (
+        <ArchiveBackupDialog
+          data={data}
+          isStaticMode={isStaticMode}
+          localBytes={localBytes}
+          mutate={mutate}
+          onClose={() => setModal(null)}
+          onImportMarkdownFile={openImportedMarkdown}
+          notify={notify}
+        />
+      )}
       {editor && (
         <DocumentEditor
           key={editor.doc.id}
           {...editor}
           data={data}
+          theme={prefs.theme}
           mutate={mutate}
           notify={notify}
           copy={copy}
           onClose={() => setEditor(null)}
         />
       )}
+      {cardDoc && (
+        <ArchiveCardDialog
+          initialTheme={prefs.theme}
+          title={cardDoc.title}
+          synopsis={cardDoc.synopsis}
+          shelfName={
+            data.shelves.find(
+              (s) => s.id === data.folders.find((f) => f.id === cardDoc.folderId)?.shelfId,
+            )?.name || '个人词库'
+          }
+          folderName={data.folders.find((f) => f.id === cardDoc.folderId)?.name || '收件夹'}
+          shelfColor={
+            data.shelves.find(
+              (s) => s.id === data.folders.find((f) => f.id === cardDoc.folderId)?.shelfId,
+            )?.color || 'moss'
+          }
+          templateText={assemble(cardDoc.blocks, data.presets)}
+          compiledText={assemble(cardDoc.blocks, data.presets)}
+          blockCount={cardDoc.blocks.length}
+          onClose={() => setCardDoc(null)}
+          notify={notify}
+        />
+      )}
+      <input
+        ref={mdImportInputRef}
+        type="file"
+        accept=".md,.markdown,.txt,text/markdown,text/plain"
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void handleMarkdownFileSelected(file);
+          e.target.value = '';
+        }}
+      />
       {menu && (
         <>
           <button className="menu-scrim" aria-label="关闭文档菜单" onClick={() => setMenu(null)} />
@@ -1119,6 +1240,29 @@ export function ArchiveApp({
             <button role="menuitem" onClick={() => openDoc(menu.doc)}>
               <Icon name="edit" size={15} />
               编辑与移动
+            </button>
+            <button
+              role="menuitem"
+              onClick={() => {
+                const md = docToMarkdownFile(menu.doc, data.presets);
+                const filename = `${menu.doc.title.replace(/[\\/:*?"<>|]/g, '-').slice(0, 60) || 'prompt'}.md`;
+                downloadTextFile(filename, md, 'text/markdown;charset=utf-8');
+                setMenu(null);
+                notify('已导出为 Markdown 文件');
+              }}
+            >
+              <Icon name="download" size={15} />
+              导出 Markdown
+            </button>
+            <button
+              role="menuitem"
+              onClick={() => {
+                setCardDoc(menu.doc);
+                setMenu(null);
+              }}
+            >
+              <Icon name="image" size={15} />
+              生成馆藏卡片
             </button>
             <div className="menu-divider" />
             <button

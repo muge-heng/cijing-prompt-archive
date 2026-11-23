@@ -704,14 +704,41 @@
   }
   .editor-footer {
     padding: 11px 16px max(11px, env(safe-area-inset-bottom));
-    gap: 7px;
-  }
-  .editor-footer .button {
-    font-size: 11px;
-    padding: 6px 10px;
+    gap: 6px;
+    flex-wrap: wrap;
   }
   .editor-count {
+    flex-basis: 100%;
     font-size: 9.5px;
+  }
+  .editor-footer .button {
+    font-size: 10.5px;
+    padding: 5px 9px;
+    min-height: 32px;
+    gap: 4px;
+  }
+  .workbench-paper-head {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .var-quick-bar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .revision-layout {
+    grid-template-columns: 1fr;
+    max-height: 66dvh;
+  }
+  .revision-timeline {
+    max-height: 150px;
+  }
+  .backup-body,
+  .revision-body,
+  .archive-card-body {
+    padding: 14px 16px;
+  }
+  .backup-section-head {
+    flex-direction: column;
   }
   .unmatched-callout,
   .fulltext-sync-bar {

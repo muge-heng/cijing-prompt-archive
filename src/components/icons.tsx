@@ -52,6 +52,11 @@ const paths = {
   leaf: ['M19.5 3c-3 2-9-1-13 3S3 15 7 18s13-1 12.5-15z M4 21 15 9'],
   pin: ['m14 3 7 7-3 1-4 5-2-1-6 6 5-7-2-2 5-5z'],
   move: ['M4 7h10 M10 3l4 4-4 4 M20 17H10 M14 13l-4 4 4 4'],
+  download: ['M12 3v12 M7 10l5 5 5-5 M4 19h16'],
+  upload: ['M12 15V3 M7 8l5-5 5 5 M4 19h16'],
+  image: ['M3.5 5h17v14h-17z M8.5 10a1.3 1.3 0 1 1-2.6 0 1.3 1.3 0 0 1 2.6 0z M4 17l5-4.5 3.5 3 3-2.5 5 4'],
+  refresh: ['M20 11a8 8 0 0 0-14.3-4.5L3 9 M3 4.5V9h4.5 M4 13a8 8 0 0 0 14.3 4.5L21 15 M21 19.5V15h-4.5'],
+  tag: ['M4 12.5V4.5h8l8.5 8.5-7.5 7.5z M8.5 8.5h.01'],
 } as const;
 export type IconName = keyof typeof paths;
 export function Icon({

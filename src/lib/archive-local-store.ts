@@ -1,9 +1,21 @@
 import { initialArchive } from './archive-seed';
 import { isBuiltinLabelCollision, normalizeHeading } from './archive-markdown';
 import {
+  docContentChanged,
+  mergeArchives,
+  normalizeArchivePayload,
+  prependDocRevision,
+  removeDocMetaForIds,
+  sanitizeRevisionsMap,
+  sanitizeTestCasesMap,
+  upsertTestCaseList,
+} from './archive-io';
+import {
   isBuiltinBlockKind,
   uid,
   type ArchiveData,
+  type DebugTestCase,
+  type DocRevision,
   type PromptBlock,
   type ShelfColor,
 } from './archive-types';
@@ -26,6 +38,7 @@ function compareId(a: string, b: string) {
 }
 
 function sortArchive(data: ArchiveData): ArchiveData {
+  const validDocIds = new Set(data.documents.map((d) => d.id));
   return {
     shelves: [...data.shelves].sort((a, b) => a.position - b.position || compareId(a.id, b.id)),
     folders: [...data.folders].sort((a, b) => a.position - b.position || compareId(a.id, b.id)),
@@ -33,7 +46,25 @@ function sortArchive(data: ArchiveData): ArchiveData {
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
     ),
     presets: [...(data.presets || [])],
+    revisions: sanitizeRevisionsMap(data.revisions, validDocIds),
+    testCases: sanitizeTestCasesMap(data.testCases, validDocIds),
   };
+}
+
+function cloneRevisions(map?: Record<string, DocRevision[]>): Record<string, DocRevision[]> {
+  const out: Record<string, DocRevision[]> = {};
+  for (const [docId, list] of Object.entries(map || {})) {
+    out[docId] = list.map((r) => ({ ...r, blocks: r.blocks.map((b) => ({ ...b })) }));
+  }
+  return out;
+}
+
+function cloneTestCases(map?: Record<string, DebugTestCase[]>): Record<string, DebugTestCase[]> {
+  const out: Record<string, DebugTestCase[]> = {};
+  for (const [docId, list] of Object.entries(map || {})) {
+    out[docId] = list.map((tc) => ({ ...tc, values: { ...tc.values } }));
+  }
+  return out;
 }
 
 function cloneArchive(data: ArchiveData): ArchiveData {
@@ -45,7 +76,22 @@ function cloneArchive(data: ArchiveData): ArchiveData {
       blocks: d.blocks.map((b) => ({ ...b })),
     })),
     presets: (data.presets || []).map((p) => ({ ...p })),
+    revisions: cloneRevisions(data.revisions),
+    testCases: cloneTestCases(data.testCases),
   };
+}
+
+export function getLocalArchiveBytes(): number {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      return new TextEncoder().encode(raw).length;
+    }
+  } catch {
+    // Ignore storage read errors.
+  }
+  return 0;
 }
 
 function isValidArchive(value: unknown): value is ArchiveData {
@@ -222,6 +268,9 @@ export function mutateLocalArchive(value: unknown): { id: string | null; archive
         data.documents.find((d) => d.id === id),
         '文档',
       );
+      if (docContentChanged(existing, docFields)) {
+        data.revisions = prependDocRevision(data.revisions, existing, nowIso);
+      }
       Object.assign(existing, docFields);
       return { id, archive: persistArchive(data) };
     }
@@ -257,6 +306,85 @@ export function mutateLocalArchive(value: unknown): { id: string | null; archive
       createdAt: new Date().toISOString(),
     });
     return { id, archive: persistArchive(data) };
+  }
+
+  if (b.action === 'importArchive') {
+    const mode = b.mode === 'replace' ? 'replace' : 'merge';
+    let normalized: ArchiveData;
+    try {
+      normalized = normalizeArchivePayload(b.archive);
+    } catch (err) {
+      throw new LocalInputError(err instanceof Error ? err.message : '导入数据格式无效。');
+    }
+    const next = mode === 'replace' ? normalized : mergeArchives(data, normalized);
+    return { id: null, archive: persistArchive(next) };
+  }
+
+  if (b.action === 'resetArchive') {
+    const fresh = initialArchive();
+    fresh.revisions = {};
+    fresh.testCases = {};
+    return { id: null, archive: persistArchive(fresh) };
+  }
+
+  if (b.action === 'restoreRevision') {
+    const docId = text(b.docId, '文档编号', 100);
+    const revisionId = text(b.revisionId, '修订版本编号', 100);
+    const doc = assertExists(
+      data.documents.find((d) => d.id === docId),
+      '文档',
+    );
+    const rev = assertExists(
+      (data.revisions?.[docId] || []).find((r) => r.id === revisionId),
+      '修订记录',
+    );
+    const nowIso = new Date().toISOString();
+    data.revisions = prependDocRevision(data.revisions, doc, nowIso);
+    doc.title = rev.title;
+    doc.synopsis = rev.synopsis;
+    doc.blocks = rev.blocks.map((item) => ({ ...item }));
+    doc.updatedAt = nowIso;
+    return { id: docId, archive: persistArchive(data) };
+  }
+
+  if (b.action === 'saveTestCase') {
+    const docId = text(b.docId, '文档编号', 100);
+    assertExists(
+      data.documents.find((d) => d.id === docId),
+      '文档',
+    );
+    const name = text(b.name, '样片名称', 24);
+    const caseId =
+      b.id !== undefined && b.id !== null && b.id !== '' ? text(b.id, '样片编号', 100) : undefined;
+    if (!b.values || typeof b.values !== 'object' || Array.isArray(b.values)) {
+      throw new LocalInputError('样片参数格式无效。');
+    }
+    try {
+      const updated = upsertTestCaseList(data.testCases?.[docId], {
+        id: caseId,
+        name,
+        values: b.values as Record<string, string>,
+      });
+      data.testCases = { ...(data.testCases || {}), [docId]: updated.list };
+      return { id: updated.id, archive: persistArchive(data) };
+    } catch (err) {
+      throw new LocalInputError(err instanceof Error ? err.message : '保存样片失败。');
+    }
+  }
+
+  if (b.action === 'deleteTestCase') {
+    const docId = text(b.docId, '文档编号', 100);
+    const caseId = text(b.id, '样片编号', 100);
+    const list = data.testCases?.[docId] || [];
+    assertExists(
+      list.find((tc) => tc.id === caseId),
+      '调试样片',
+    );
+    const nextList = list.filter((tc) => tc.id !== caseId);
+    data.testCases = { ...(data.testCases || {}) };
+    if (nextList.length) data.testCases[docId] = nextList;
+    else delete data.testCases[docId];
+    return { id: caseId, archive: persistArchive(data) };
   }
 
   const id = text(b.id, '编号', 100);
@@ -328,6 +456,9 @@ export function mutateLocalArchive(value: unknown): { id: string | null; archive
       const idx = data.documents.findIndex((d) => d.id === id);
       assertExists(idx >= 0 ? data.documents[idx] : undefined, '文档');
       data.documents.splice(idx, 1);
+      const cleaned = removeDocMetaForIds(data.revisions, data.testCases, [id]);
+      data.revisions = cleaned.revisions;
+      data.testCases = cleaned.testCases;
       return { id, archive: persistArchive(data) };
     }
     case 'updateShelf': {
@@ -354,15 +485,23 @@ export function mutateLocalArchive(value: unknown): { id: string | null; archive
       assertExists(idx >= 0 ? data.shelves[idx] : undefined, '货架');
       data.shelves.splice(idx, 1);
       const removedFolderIds = new Set(data.folders.filter((f) => f.shelfId === id).map((f) => f.id));
+      const removedDocIds = data.documents.filter((d) => removedFolderIds.has(d.folderId)).map((d) => d.id);
       data.folders = data.folders.filter((f) => f.shelfId !== id);
       data.documents = data.documents.filter((d) => !removedFolderIds.has(d.folderId));
+      const cleaned = removeDocMetaForIds(data.revisions, data.testCases, removedDocIds);
+      data.revisions = cleaned.revisions;
+      data.testCases = cleaned.testCases;
       return { id, archive: persistArchive(data) };
     }
     case 'deleteFolder': {
       const idx = data.folders.findIndex((f) => f.id === id);
       assertExists(idx >= 0 ? data.folders[idx] : undefined, '文件夹');
       data.folders.splice(idx, 1);
+      const removedDocIds = data.documents.filter((d) => d.folderId === id).map((d) => d.id);
       data.documents = data.documents.filter((d) => d.folderId !== id);
+      const cleaned = removeDocMetaForIds(data.revisions, data.testCases, removedDocIds);
+      data.revisions = cleaned.revisions;
+      data.testCases = cleaned.testCases;
       return { id, archive: persistArchive(data) };
     }
     default:
