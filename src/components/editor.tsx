@@ -372,7 +372,7 @@ export function DocumentEditor({
             </div>
 
             <div className="editor-top-right">
-              <div className="editor-tabs" role="tablist" aria-label="工作台模式">
+              <div className="editor-tabs" role="tablist" aria-label="工作台视图">
                 <button
                   type="button"
                   role="tab"
@@ -381,7 +381,7 @@ export function DocumentEditor({
                   onClick={() => setMode('edit')}
                 >
                   <Icon name="pen" size={14} />
-                  <span>模块编辑</span>
+                  <span>仅编辑</span>
                 </button>
                 <button
                   type="button"
@@ -401,7 +401,7 @@ export function DocumentEditor({
                   onClick={() => setMode('test')}
                 >
                   <Icon name="test" size={14} />
-                  <span>变量调试</span>
+                  <span>仅调试</span>
                   {keys.length > 0 && <small>{keys.length}</small>}
                 </button>
               </div>
@@ -461,7 +461,7 @@ export function DocumentEditor({
                       onClick={switchToBlocks}
                     >
                       <Icon name="layers" size={13} />
-                      模块化编辑
+                      模块拼装
                     </button>
                     <button
                       type="button"
@@ -716,7 +716,7 @@ export function DocumentEditor({
                             className="button small"
                             onClick={() => resolveAndSyncFullText(false)}
                           >
-                            应用并切回模块编辑
+                            应用并切回模块拼装
                           </button>
                         </div>
                       )

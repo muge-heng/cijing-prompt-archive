@@ -34,7 +34,13 @@ const navItems: { kind: 'overview' | 'all' | 'favorites' | 'recent'; icon: IconN
   { kind: 'recent', icon: 'history' },
 ];
 const isStaticMode = process.env.NEXT_PUBLIC_STATIC_EXPORT === 'true';
-const defaults: Preferences = { theme: 'light', entrance: true, motion: true, motionLevel: 'rich' };
+const defaults: Preferences = {
+  theme: 'light',
+  entrance: true,
+  motion: true,
+  motionLevel: 'rich',
+  compactIndex: false,
+};
 function section(title: string, en: string, action?: ReactNode) {
   return (
     <div className="section-heading">
@@ -69,6 +75,7 @@ export function ArchiveApp({
     [entry, setEntry] = useState(0),
     [entering, setEntering] = useState(false);
   const [menu, setMenu] = useState<{ doc: PromptDoc; x: number; y: number } | null>(null),
+    [profileMenu, setProfileMenu] = useState(false),
     [toast, setToast] = useState(''),
     [pending, setPending] = useState(0),
     [syncError, setSyncError] = useState(false);
@@ -106,6 +113,7 @@ export function ArchiveApp({
     setSort('updated');
     setMobileNav(false);
     setMenu(null);
+    setProfileMenu(false);
     setModal(null);
     const href = viewHref({ kind, id }, window.location.href);
     if (window.location.pathname + window.location.search + window.location.hash !== href)
@@ -162,6 +170,7 @@ export function ArchiveApp({
           entrance: stored.entrance !== false,
           motion: motionLevel !== 'off',
           motionLevel,
+          compactIndex: stored.compactIndex === true,
         };
       } catch {}
       setPrefs(p);
@@ -217,10 +226,12 @@ export function ArchiveApp({
         setModal((m) => (m === 'search' ? null : 'search'));
         setMobileNav(false);
         setMenu(null);
+        setProfileMenu(false);
       }
       if (e.key === 'Escape') {
         setMobileNav(false);
         setMenu(null);
+        setProfileMenu(false);
       }
     };
     window.addEventListener('keydown', keys);
@@ -592,35 +603,98 @@ export function ArchiveApp({
           </nav>
         </div>
         <div className="sidebar-bottom">
-          <div className="index-ticket">
-            <div className="ticket-heading">
+          <div className={`index-ticket ${prefs.compactIndex ? 'is-collapsed' : ''}`}>
+            <button
+              type="button"
+              className="ticket-toggle"
+              aria-expanded={!prefs.compactIndex}
+              aria-label={prefs.compactIndex ? '展开馆藏索引' : '收起馆藏索引'}
+              onClick={() => changePrefs({ ...prefs, compactIndex: !prefs.compactIndex })}
+            >
               <Icon name="layers" size={13} />
               <strong>馆藏索引</strong>
               <span>INDEX</span>
-            </div>
-            <div className="ticket-stats">
-              {[
-                [data.shelves.length, '货架'],
-                [data.folders.length, '文件夹'],
-                [data.documents.length, '提示词'],
-              ].map(([v, l]) => (
-                <div key={l}>
-                  <b>{String(v).padStart(2, '0')}</b>
-                  <small>{l}</small>
+              <Icon name="up" size={11} className="ticket-toggle-chevron" />
+            </button>
+            {prefs.compactIndex ? (
+              <div className="ticket-compact-summary">
+                {String(data.shelves.length).padStart(2, '0')} 货架 ·{' '}
+                {String(data.folders.length).padStart(2, '0')} 夹 ·{' '}
+                {String(data.documents.length).padStart(2, '0')} 篇
+              </div>
+            ) : (
+              <>
+                <div className="ticket-stats">
+                  {[
+                    [data.shelves.length, '货架'],
+                    [data.folders.length, '文件夹'],
+                    [data.documents.length, '提示词'],
+                  ].map(([v, l]) => (
+                    <div key={l}>
+                      <b>{String(v).padStart(2, '0')}</b>
+                      <small>{l}</small>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <div className="ticket-foot">
-              <span>PRIVATE COLLECTION</span>
-              <i className="barcode" />
-            </div>
+                <div className="ticket-foot">
+                  <span>PRIVATE COLLECTION</span>
+                  <i className="barcode" />
+                </div>
+              </>
+            )}
           </div>
           <button className="settings-link" onClick={openSettings}>
             <Icon name="settings" size={17} />
             仓库设置
             <Icon name="chevron" size={13} />
           </button>
-          <button className="workspace-profile" onClick={openSettings}>
+          {profileMenu && (
+            <>
+              <button
+                type="button"
+                className="workspace-popover-scrim"
+                aria-label="关闭工作空间菜单"
+                onClick={() => setProfileMenu(false)}
+              />
+              <div className="workspace-popover" role="menu" aria-label="私人工作空间菜单">
+                <div className="workspace-popover-head">ARCHIVE WORKSPACE</div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="workspace-popover-item"
+                  onClick={() => {
+                    setProfileMenu(false);
+                    changePrefs({ ...prefs, compactIndex: !prefs.compactIndex });
+                  }}
+                >
+                  <Icon name="layers" size={15} />
+                  {prefs.compactIndex ? '展开馆藏索引卡' : '折叠馆藏索引卡'}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="workspace-popover-item"
+                  onClick={() => {
+                    setProfileMenu(false);
+                    openSettings();
+                  }}
+                >
+                  <Icon name="settings" size={15} />
+                  仓库偏好设置
+                </button>
+                <div className="workspace-popover-meta">
+                  <span>{isStaticMode ? '浏览器本地存储模式' : 'PostgreSQL 仓库已连接'}</span>
+                </div>
+              </div>
+            </>
+          )}
+          <button
+            type="button"
+            className="workspace-profile"
+            aria-haspopup="menu"
+            aria-expanded={profileMenu}
+            onClick={() => setProfileMenu((v) => !v)}
+          >
             <span className="profile-mark">
               A<span>.</span>
             </span>

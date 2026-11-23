@@ -11,6 +11,7 @@ export interface Preferences {
   entrance: boolean;
   motion: boolean;
   motionLevel: MotionLevel;
+  compactIndex?: boolean;
 }
 export type EntityForm = { kind: 'shelf' | 'folder'; id?: string; shelfId?: string };
 const tones: [ShelfColor, string][] = [
