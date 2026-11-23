@@ -1,4 +1,5 @@
 'use client';
+import type { CSSProperties } from 'react';
 import { assemble, type ArchiveData, type PromptDoc } from '@/lib/archive-types';
 import { Icon } from './icons';
 export function since(iso: string, now: number) {
@@ -80,11 +81,16 @@ export function DocumentList({
           操作
         </span>
       </div>
-      {docs.map((doc) => {
+      {docs.map((doc, index) => {
         const folder = data.folders.find((f) => f.id === doc.folderId);
         const shelf = data.shelves.find((s) => s.id === folder?.shelfId);
         return (
-          <div className="document-row" role="row" key={doc.id}>
+          <div
+            className="document-row"
+            role="row"
+            key={doc.id}
+            style={{ '--row-index': Math.min(index, 12) } as CSSProperties}
+          >
             <div role="cell" className="document-title-cell">
               <button className="document-open" onClick={() => onOpen(doc)}>
                 <PaperGlyph color={shelf?.color} />

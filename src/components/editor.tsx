@@ -14,6 +14,7 @@ import {
 } from '@/lib/archive-types';
 import { Icon } from './icons';
 import { Dialog, Overlay } from './dialog';
+import { ArchiveSelect, type SelectOption } from './archive-select';
 export type ArchiveMutation = (body: Record<string, unknown>) => Promise<string | null>;
 export type CopyText = (text: string, message?: string) => Promise<void>;
 export function DocumentEditor({
@@ -123,6 +124,16 @@ export function DocumentEditor({
   };
   const folder = data.folders.find((f) => f.id === folderId),
     shelf = data.shelves.find((s) => s.id === folder?.shelfId);
+  const folderOptions: SelectOption[] = data.shelves.flatMap((s) =>
+    data.folders
+      .filter((f) => f.shelfId === s.id)
+      .map((f) => ({
+        value: f.id,
+        label: f.name,
+        group: s.name,
+        tone: s.color,
+      })),
+  );
   return (
     <>
       <Overlay label={isNew ? '新建提示词' : '提示词工作台'} className="editor-overlay" onClose={close}>
@@ -183,22 +194,18 @@ export function DocumentEditor({
         <div className="editor-scroll">
           {tab === 'edit' ? (
             <>
-              <label className="field-label">
-                归档位置
-                <select className="field" value={folderId} onChange={(e) => setFolderId(e.target.value)}>
-                  {data.shelves.map((s) => (
-                    <optgroup key={s.id} label={s.name}>
-                      {data.folders
-                        .filter((f) => f.shelfId === s.id)
-                        .map((f) => (
-                          <option key={f.id} value={f.id}>
-                            {s.name} / {f.name}
-                          </option>
-                        ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </label>
+              <div className="field-label">
+                <span className="field-label-text">归档位置</span>
+                <ArchiveSelect
+                  ariaLabel="归档位置"
+                  icon="folder"
+                  align="left"
+                  matchWidth
+                  value={folderId}
+                  onChange={setFolderId}
+                  options={folderOptions}
+                />
+              </div>
               <div className="mini-section">
                 <h3>
                   提示词模块 <span>{String(blocks.length).padStart(2, '0')}</span>

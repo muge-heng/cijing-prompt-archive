@@ -5,17 +5,19 @@ export function ShelfCard({
   number,
   folders,
   documents,
+  opening = false,
   onClick,
 }: {
   shelf: Shelf;
   number: number;
   folders: number;
   documents: number;
+  opening?: boolean;
   onClick: () => void;
 }) {
   return (
     <button
-      className={`shelf-card tone-${shelf.color}`}
+      className={`shelf-card tone-${shelf.color} ${opening ? 'is-opening' : ''}`}
       onClick={onClick}
       aria-label={`打开${shelf.name}货架，${folders} 个文件夹，${documents} 篇提示词`}
       style={{ animationDelay: `${number * 65}ms` }}

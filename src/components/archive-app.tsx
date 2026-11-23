@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { assemble, uid, type ArchiveData, type PromptDoc } from '@/lib/archive-types';
 import { mutateLocalArchive, readLocalArchive } from '@/lib/archive-local-store';
 import { archiveDate } from '@/lib/archive-dates';
@@ -8,7 +8,15 @@ import { ShelfCard } from './shelf-card';
 import { DocumentList } from './document-list';
 import { DocumentEditor } from './editor';
 import { Dialog } from './dialog';
-import { EntityDialog, SearchDialog, Settings, type EntityForm, type Preferences } from './archive-dialogs';
+import { ArchiveSelect } from './archive-select';
+import {
+  EntityDialog,
+  SearchDialog,
+  Settings,
+  type EntityForm,
+  type MotionLevel,
+  type Preferences,
+} from './archive-dialogs';
 
 import {
   resolveView,
@@ -18,6 +26,7 @@ import {
   type ArchiveView as View,
 } from '@/lib/archive-navigation';
 type Confirm = { title: string; message: string; run: () => Promise<void> };
+type ViewTransition = 'none' | 'shelf-open' | 'folder-open' | 'switch';
 const navItems: { kind: 'overview' | 'all' | 'favorites' | 'recent'; icon: IconName }[] = [
   { kind: 'overview', icon: 'overview' },
   { kind: 'all', icon: 'files' },
@@ -25,7 +34,7 @@ const navItems: { kind: 'overview' | 'all' | 'favorites' | 'recent'; icon: IconN
   { kind: 'recent', icon: 'history' },
 ];
 const isStaticMode = process.env.NEXT_PUBLIC_STATIC_EXPORT === 'true';
-const defaults: Preferences = { theme: 'light', entrance: true, motion: true };
+const defaults: Preferences = { theme: 'light', entrance: true, motion: true, motionLevel: 'rich' };
 function section(title: string, en: string, action?: ReactNode) {
   return (
     <div className="section-heading">
@@ -66,7 +75,12 @@ export function ArchiveApp({
   const [filter, setFilter] = useState(''),
     [shelfFilter, setShelfFilter] = useState(''),
     [sort, setSort] = useState('updated');
+  const [expandedShelves, setExpandedShelves] = useState<Record<string, boolean>>({}),
+    [openingShelfId, setOpeningShelfId] = useState<string | null>(null),
+    [openingFolderId, setOpeningFolderId] = useState<string | null>(null),
+    [viewTransition, setViewTransition] = useState<ViewTransition>('none');
   const messageTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
+    navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null),
     sequence = useRef(0),
     lastApplied = useRef(0),
     pendingStars = useRef(new Set<string>());
@@ -75,7 +89,17 @@ export function ArchiveApp({
     if (messageTimer.current) clearTimeout(messageTimer.current);
     messageTimer.current = setTimeout(() => setToast(''), 2900);
   }, []);
-  const navigate = useCallback((kind: View['kind'], id?: string) => {
+  const navigate = useCallback((kind: View['kind'], id?: string, transition: ViewTransition = 'switch') => {
+    if (navTimerRef.current) {
+      clearTimeout(navTimerRef.current);
+      navTimerRef.current = null;
+    }
+    setOpeningShelfId(null);
+    setOpeningFolderId(null);
+    setViewTransition(transition);
+    if (kind === 'shelf' && id) {
+      setExpandedShelves((prev) => ({ ...prev, [id]: true }));
+    }
     setView({ kind, id });
     setFilter('');
     setShelfFilter('');
@@ -88,22 +112,62 @@ export function ArchiveApp({
       window.history.pushState(null, '', href);
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
+  const shouldUseRichMotion = () =>
+    prefs.motionLevel === 'rich' &&
+    typeof window !== 'undefined' &&
+    !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const openShelfFromCard = (id: string) => {
+    if (!shouldUseRichMotion()) {
+      navigate('shelf', id, prefs.motionLevel === 'gentle' ? 'switch' : 'none');
+      return;
+    }
+    if (openingShelfId === id) return;
+    if (navTimerRef.current) clearTimeout(navTimerRef.current);
+    setOpeningFolderId(null);
+    setOpeningShelfId(id);
+    navTimerRef.current = setTimeout(() => {
+      navTimerRef.current = null;
+      navigate('shelf', id, 'shelf-open');
+    }, 220);
+  };
+  const openFolderFromCard = (id: string) => {
+    if (!shouldUseRichMotion()) {
+      navigate('folder', id, prefs.motionLevel === 'gentle' ? 'switch' : 'none');
+      return;
+    }
+    if (openingFolderId === id) return;
+    if (navTimerRef.current) clearTimeout(navTimerRef.current);
+    setOpeningShelfId(null);
+    setOpeningFolderId(id);
+    navTimerRef.current = setTimeout(() => {
+      navTimerRef.current = null;
+      navigate('folder', id, 'folder-open');
+    }, 210);
+  };
   useEffect(() => {
     // Restore device-only state on the first browser frame; the server snapshot stays deterministic.
     const hydrateFrame = window.requestAnimationFrame(() => {
       let p = defaults;
       try {
         const stored = JSON.parse(localStorage.getItem('archive-preferences') || '{}');
+        const rawLevel = stored.motionLevel;
+        const motionLevel: MotionLevel =
+          rawLevel === 'rich' || rawLevel === 'gentle' || rawLevel === 'off'
+            ? rawLevel
+            : stored.motion === false
+              ? 'off'
+              : 'rich';
         p = {
           theme: stored.theme === 'dark' ? 'dark' : 'light',
           entrance: stored.entrance !== false,
-          motion: stored.motion !== false,
+          motion: motionLevel !== 'off',
+          motionLevel,
         };
       } catch {}
       setPrefs(p);
       document.documentElement.dataset.theme = p.theme;
-      document.documentElement.dataset.motion = p.motion ? 'on' : 'off';
-      setEntering(p.entrance && p.motion);
+      document.documentElement.dataset.motion = p.motionLevel;
+      setEntering(p.entrance && p.motionLevel !== 'off');
       if (isStaticMode) {
         setData(readLocalArchive());
         setNow(Date.now());
@@ -113,6 +177,13 @@ export function ArchiveApp({
       }
     });
     const back = () => {
+      if (navTimerRef.current) {
+        clearTimeout(navTimerRef.current);
+        navTimerRef.current = null;
+      }
+      setOpeningShelfId(null);
+      setOpeningFolderId(null);
+      setViewTransition('switch');
       setView(viewFromLocation(new URL(window.location.href)));
       setFilter('');
       setShelfFilter('');
@@ -129,6 +200,7 @@ export function ArchiveApp({
       window.removeEventListener('popstate', back);
       window.removeEventListener('hashchange', back);
       if (messageTimer.current) clearTimeout(messageTimer.current);
+      if (navTimerRef.current) clearTimeout(navTimerRef.current);
     };
   }, []);
   useEffect(() => {
@@ -164,7 +236,7 @@ export function ArchiveApp({
     const trap = (e: KeyboardEvent) => {
       if (e.key !== 'Tab' || !root) return;
       const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')).filter(
-        (b) => b.offsetParent !== null,
+        (b) => b.offsetParent !== null && b.tabIndex >= 0,
       );
       const first = buttons[0],
         last = buttons[buttons.length - 1];
@@ -190,11 +262,13 @@ export function ArchiveApp({
     };
   }, [mobileNav]);
   const changePrefs = (p: Preferences) => {
-    setPrefs(p);
-    document.documentElement.dataset.theme = p.theme;
-    document.documentElement.dataset.motion = p.motion ? 'on' : 'off';
+    const motionLevel: MotionLevel = p.motionLevel || (p.motion ? 'rich' : 'off');
+    const next: Preferences = { ...p, motionLevel, motion: motionLevel !== 'off' };
+    setPrefs(next);
+    document.documentElement.dataset.theme = next.theme;
+    document.documentElement.dataset.motion = next.motionLevel;
     try {
-      localStorage.setItem('archive-preferences', JSON.stringify(p));
+      localStorage.setItem('archive-preferences', JSON.stringify(next));
     } catch {
       notify('当前浏览器无法保存设备偏好');
     }
@@ -446,20 +520,75 @@ export function ArchiveApp({
               <Icon name="plus" size={14} />
             </button>
           </div>
-          <nav className="shelf-navigation">
-            {data.shelves.map((s) => (
-              <button
-                key={s.id}
-                className={`nav-item ${s.id === shelf?.id ? 'active' : ''}`}
-                onClick={() => navigate('shelf', s.id)}
-              >
-                <span className={`shelf-nav-icon tone-${s.color}`}>
-                  <Icon name="shelf" size={15} />
-                </span>
-                <span>{s.name}</span>
-                <Icon name="chevron" size={12} className="nav-chevron" />
-              </button>
-            ))}
+          <nav className="shelf-navigation" aria-label="货架目录">
+            {data.shelves.map((s) => {
+              const sFolders = data.folders.filter((f) => f.shelfId === s.id);
+              const isExpanded = expandedShelves[s.id] ?? s.id === shelf?.id;
+              const isShelfActive = view.kind === 'shelf' && view.id === s.id;
+              const isBranchActive = s.id === shelf?.id;
+              return (
+                <div className="shelf-tree-group" key={s.id}>
+                  <div
+                    className={`shelf-nav-row ${isShelfActive ? 'active' : isBranchActive ? 'is-branch-active' : ''}`}
+                  >
+                    <button
+                      type="button"
+                      className="nav-item shelf-nav-main"
+                      onClick={() => {
+                        setExpandedShelves((prev) => ({ ...prev, [s.id]: true }));
+                        navigate('shelf', s.id);
+                      }}
+                      aria-current={isShelfActive ? 'page' : undefined}
+                    >
+                      <span className={`shelf-nav-icon tone-${s.color}`}>
+                        <Icon name="shelf" size={15} />
+                      </span>
+                      <span>{s.name}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`shelf-expand-btn ${isExpanded ? 'is-expanded' : ''}`}
+                      aria-label={isExpanded ? `收起${s.name}文件夹` : `展开${s.name}文件夹`}
+                      aria-expanded={isExpanded}
+                      onClick={() =>
+                        setExpandedShelves((prev) => ({
+                          ...prev,
+                          [s.id]: !isExpanded,
+                        }))
+                      }
+                    >
+                      <Icon name="chevron" size={12} className="nav-chevron" />
+                    </button>
+                  </div>
+                  <div className={`shelf-sublist-wrap ${isExpanded ? 'is-open' : ''}`} aria-hidden={!isExpanded}>
+                    <div className="shelf-sublist">
+                      {sFolders.length ? (
+                        sFolders.map((f) => {
+                          const docCount = data.documents.filter((d) => d.folderId === f.id).length;
+                          const isFolderActive = view.kind === 'folder' && view.id === f.id;
+                          return (
+                            <button
+                              type="button"
+                              key={f.id}
+                              tabIndex={isExpanded ? 0 : -1}
+                              className={`sub-nav-item ${isFolderActive ? 'active' : ''}`}
+                              onClick={() => navigate('folder', f.id)}
+                              aria-current={isFolderActive ? 'page' : undefined}
+                            >
+                              <Icon name="folder" size={13} />
+                              <span>{f.name}</span>
+                              <small>{docCount}</small>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <span className="sub-nav-empty">暂无文件夹</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </nav>
         </div>
         <div className="sidebar-bottom">
@@ -551,7 +680,10 @@ export function ArchiveApp({
             </button>
           </div>
         </header>
-        <div className="main-content" key={`${view.kind}-${view.id || ''}-${entry}`}>
+        <div
+          className={`main-content view-transition-${prefs.motionLevel === 'off' ? 'none' : viewTransition}`}
+          key={`${view.kind}-${view.id || ''}-${entry}`}
+        >
           {view.kind === 'overview' ? (
             <>
               <section className="welcome-hero">
@@ -602,7 +734,8 @@ export function ArchiveApp({
                         number={i + 1}
                         folders={fs.length}
                         documents={data.documents.filter((d) => fs.some((f) => f.id === d.folderId)).length}
-                        onClick={() => navigate('shelf', s.id)}
+                        opening={openingShelfId === s.id}
+                        onClick={() => openShelfFromCard(s.id)}
                       />
                     );
                   })}
@@ -709,8 +842,9 @@ export function ArchiveApp({
                     {shelfFolders.map((f, i) => (
                       <button
                         key={f.id}
-                        className={`folder-card tone-${shelf?.color}`}
-                        onClick={() => navigate('folder', f.id)}
+                        className={`folder-card tone-${shelf?.color} ${openingFolderId === f.id ? 'is-opening' : ''}`}
+                        style={{ '--card-index': Math.min(i, 12) } as CSSProperties}
+                        onClick={() => openFolderFromCard(f.id)}
                       >
                         <span className="folder-tab">F — {String(i + 1).padStart(2, '0')}</span>
                         <div className="folder-sheet">
@@ -761,28 +895,36 @@ export function ArchiveApp({
                   </label>
                   <div className="filter-selects">
                     {view.kind !== 'shelf' && view.kind !== 'folder' && (
-                      <select
-                        className="compact-select"
-                        aria-label="按货架筛选"
+                      <ArchiveSelect
+                        ariaLabel="按货架筛选"
+                        icon="shelf"
+                        compact
+                        align="right"
                         value={shelfFilter}
-                        onChange={(e) => setShelfFilter(e.target.value)}
-                      >
-                        <option value="">全部货架</option>
-                        {data.shelves.map((s) => (
-                          <option value={s.id} key={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={setShelfFilter}
+                        options={[
+                          { value: '', label: '全部货架' },
+                          ...data.shelves.map((s) => ({
+                            value: s.id,
+                            label: s.name,
+                            tone: s.color,
+                          })),
+                        ]}
+                      />
                     )}
-                    <label className="sort-select">
-                      <Icon name="sort" size={14} />
-                      <select aria-label="文档排序" value={sort} onChange={(e) => setSort(e.target.value)}>
-                        <option value="updated">{view.kind === 'recent' ? '最近访问' : '最近编辑'}</option>
-                        <option value="oldest">最早编辑</option>
-                        <option value="name">标题顺序</option>
-                      </select>
-                    </label>
+                    <ArchiveSelect
+                      ariaLabel="文档排序"
+                      icon="sort"
+                      compact
+                      align="right"
+                      value={sort}
+                      onChange={setSort}
+                      options={[
+                        { value: 'updated', label: view.kind === 'recent' ? '最近访问' : '最近编辑' },
+                        { value: 'oldest', label: '最早编辑' },
+                        { value: 'name', label: '标题顺序' },
+                      ]}
+                    />
                   </div>
                 </div>
                 <DocumentList

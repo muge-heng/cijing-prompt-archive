@@ -5,10 +5,12 @@ import { Dialog, Overlay } from './dialog';
 import { Icon } from './icons';
 import { PaperGlyph } from './document-list';
 import type { ArchiveMutation } from './editor';
+export type MotionLevel = 'rich' | 'gentle' | 'off';
 export interface Preferences {
   theme: 'light' | 'dark';
   entrance: boolean;
   motion: boolean;
+  motionLevel: MotionLevel;
 }
 export type EntityForm = { kind: 'shelf' | 'folder'; id?: string; shelfId?: string };
 const tones: [ShelfColor, string][] = [
@@ -183,6 +185,11 @@ function Switch({ checked, onChange, label }: { checked: boolean; onChange: () =
     </button>
   );
 }
+const motionModes: { level: MotionLevel; label: string; hint: string }[] = [
+  { level: 'rich', label: '丰富拟物', hint: '抽屉拉出、文件夹翻页、层叠入场' },
+  { level: 'gentle', label: '轻柔克制', hint: '短促淡入过渡，减弱视差与等待' },
+  { level: 'off', label: '关闭动效', hint: '立即切换页面，无动态效果' },
+];
 export function Settings({
   prefs,
   change,
@@ -194,6 +201,8 @@ export function Settings({
   onClose: () => void;
   replay: () => void;
 }) {
+  const motionLevel: MotionLevel = prefs.motionLevel || (prefs.motion ? 'rich' : 'off');
+  const currentMotion = motionModes.find((m) => m.level === motionLevel) || motionModes[0];
   return (
     <Dialog title="仓库设置" eyebrow="WORKSPACE PREFERENCES" onClose={onClose}>
       <div className="settings-body">
@@ -229,16 +238,27 @@ export function Settings({
             onChange={() => change({ ...prefs, entrance: !prefs.entrance })}
           />
         </div>
-        <div className="setting-row">
-          <div>
-            <strong>界面动态效果</strong>
-            <p>抽屉浮起、窗口切换与材质光泽。</p>
+        <div className="setting-row setting-row-stack">
+          <div className="setting-row-head">
+            <div>
+              <strong>界面动态效果</strong>
+              <p>抽屉拉开、文件夹翻页与窗口切换。当前：{currentMotion.hint}</p>
+            </div>
           </div>
-          <Switch
-            checked={prefs.motion}
-            label="界面动态效果"
-            onChange={() => change({ ...prefs, motion: !prefs.motion })}
-          />
+          <div className="motion-segmented" role="radiogroup" aria-label="界面动效强度">
+            {motionModes.map((m) => (
+              <button
+                key={m.level}
+                type="button"
+                role="radio"
+                aria-checked={motionLevel === m.level}
+                className={motionLevel === m.level ? 'selected' : ''}
+                onClick={() => change({ ...prefs, motionLevel: m.level, motion: m.level !== 'off' })}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="shortcut-note">
           <span>
@@ -263,7 +283,7 @@ export function Settings({
       <div className="dialog-footer">
         <button
           className="text-button left-action"
-          disabled={!prefs.entrance || !prefs.motion}
+          disabled={!prefs.entrance || motionLevel === 'off'}
           onClick={replay}
         >
           <Icon name="play" size={13} />

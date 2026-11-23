@@ -556,10 +556,22 @@
     gap: 5px;
   }
   .compact-select,
-  .sort-select {
+  .sort-select,
+  .archive-select-trigger.is-compact {
     font-size: 10px;
     min-height: 31px;
-    padding: 0 4px;
+    padding: 0 7px;
+    gap: 4px;
+  }
+  .archive-select-trigger.is-compact .archive-select-icon {
+    display: none;
+  }
+  .archive-select-menu {
+    min-width: 150px;
+  }
+  .motion-segmented button {
+    font-size: 10.5px;
+    padding: 4px;
   }
   .library-filters {
     gap: 6px;
@@ -737,6 +749,16 @@
     display: none;
   }
 }
+@media (max-height: 520px) {
+  .sidebar {
+    overflow-y: auto;
+  }
+  .sidebar-nav,
+  .shelf-navigation {
+    overflow: visible;
+    flex: initial;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   *,
   *::after,
@@ -750,6 +772,33 @@
   .folder-card:hover {
     transform: none;
   }
+}
+html[data-motion='gentle'] .shelf-card,
+html[data-motion='gentle'] .folder-card {
+  transition-duration: 0.16s;
+}
+html[data-motion='gentle'] .shelf-card:hover,
+html[data-motion='gentle'] .folder-card:hover {
+  transform: translateY(-1px);
+}
+html[data-motion='gentle'] .room-entering .hero-art {
+  animation: fade-in 0.35s ease both;
+}
+html[data-motion='gentle'] .room-entering .shelf-card {
+  animation: appear-up 0.25s ease both;
+  animation-delay: 0ms !important;
+}
+html[data-motion='gentle'] .main-content.view-transition-shelf-open .collection-heading,
+html[data-motion='gentle'] .main-content.view-transition-shelf-open .folder-card,
+html[data-motion='gentle'] .main-content.view-transition-shelf-open .library-section,
+html[data-motion='gentle'] .main-content.view-transition-folder-open .collection-heading,
+html[data-motion='gentle'] .main-content.view-transition-folder-open .document-row,
+html[data-motion='gentle'] .main-content.view-transition-switch {
+  animation: fade-in 0.16s ease both;
+  animation-delay: 0ms !important;
+}
+html[data-motion='gentle'] .shelf-sublist-wrap {
+  transition-duration: 0.14s;
 }
 html[data-motion='off'] *,
 html[data-motion='off'] *::after,

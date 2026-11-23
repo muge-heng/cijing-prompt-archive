@@ -42,7 +42,8 @@
 │   │   ├── workbench.css           # 弹层、设置面板、全局搜索框、右侧工作台与变量调试样式
 │   │   └── responsive.css          # 桌面宽屏/紧凑屏/平板抽屉/移动端适配与降动效规则
 │   ├── components/
-│   │   ├── archive-app.tsx         # 工作台主容器与全局状态中心（957 行）
+│   │   ├── archive-app.tsx         # 工作台主容器与全局状态中心
+│   │   ├── archive-select.tsx      # 纸质黄铜风自定义可访问下拉选择器（替代原生 select）
 │   │   ├── editor.tsx              # 右侧文档工作台（模块编辑 + 本地变量调试）
 │   │   ├── archive-dialogs.tsx     # 实体表单弹窗、仓库设置弹窗、全局搜索弹窗
 │   │   ├── dialog.tsx              # 无障碍 Overlay 与 Dialog 基础容器（焦点陷阱/滚动锁定）
@@ -227,7 +228,7 @@ flowchart TD
   - 全局叠印 SVG 纸张噪点滤镜（`grain.svg`）与木纹滤镜（`wood.svg`），配合 CSS 渐变高光、内阴影实现实体木质抽屉、一字螺丝、镶嵌纸质标签框与铜版画质感欢迎铭牌。
   - `BrassPull`（`src/components/icons.tsx`）为每个货架生成独立的 `<linearGradient id="metal-${id}">` 与 `plate-${id}`，悬停时产生位移与阴影深度变化。
 - **动效与无障碍降级（`src/app/responsive.css`）**：
-  - 欢迎光影扫过（`archive-light`）、抽屉 3D 翻入（`drawer-in`，带 `number * 65ms` 阶梯延迟）与内容淡入均受 `.room-entering`（1400ms 自动结束）控制，支持独立关闭「入仓过渡动画」或「界面动态效果」。
+  - 欢迎光影扫过（`archive-light`）、抽屉 3D 翻入（`drawer-in`）、抽屉拉开（`drawer-pull-open`）、文件夹翻页（`folder-sheet-open`）与目标视图层叠展开（`view-unfold` / `folder-rise` / `doc-sheet-in`）均支持在设置中按「丰富拟物 / 轻柔克制 / 关闭动效」三档调节（对应 `html[data-motion='rich' | 'gentle' | 'off']`），入仓过渡可独立开关。
   - `@media (prefers-reduced-motion: reduce)` 与 `html[data-motion='off']` 统一将过渡与动画时长压缩至 `0.001ms` 并禁用悬停位移。
 - **响应式断点**：覆盖 `>=1550px`（宽屏展开）、`901px–1190px`（紧凑边栏）、`<=900px`（抽屉式侧栏 + 焦点陷阱）、`<=670px`（货架横向 `scroll-snap` 滑轨、文档列表三列精简）、`<=385px` 及低高度视口（`<=740px` / `<=630px` 自动隐藏馆藏索引票据）。
 
