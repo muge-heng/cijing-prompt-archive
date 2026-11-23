@@ -420,7 +420,7 @@ export function ArchiveApp({
     );
   if (filter.trim())
     visibleDocs = visibleDocs.filter((d) =>
-      (d.title + d.synopsis + assemble(d.blocks)).toLowerCase().includes(filter.trim().toLowerCase()),
+      (d.title + d.synopsis + assemble(d.blocks, data.presets)).toLowerCase().includes(filter.trim().toLowerCase()),
     );
   visibleDocs = [...visibleDocs].sort((a, b) =>
     sort === 'name'
@@ -1025,7 +1025,7 @@ export function ArchiveApp({
             <button
               role="menuitem"
               onClick={() => {
-                void copy(assemble(menu.doc.blocks));
+                void copy(assemble(menu.doc.blocks, data.presets));
                 setMenu(null);
               }}
             >

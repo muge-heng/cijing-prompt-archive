@@ -1,10 +1,24 @@
 export type ShelfColor = 'moss' | 'walnut' | 'slate' | 'wine' | 'ochre';
-export type BlockKind = 'role' | 'task' | 'context' | 'rules' | 'format' | 'text';
+export type BuiltinBlockKind = 'role' | 'task' | 'context' | 'rules' | 'format' | 'text';
+export type BlockKind = BuiltinBlockKind | 'custom';
+
 export interface PromptBlock {
   id: string;
   kind: BlockKind;
   text: string;
+  presetId?: string;
+  label?: string;
+  color?: ShelfColor;
 }
+
+export interface BlockPreset {
+  id: string;
+  name: string;
+  template: string;
+  color: ShelfColor;
+  createdAt: string;
+}
+
 export interface Shelf {
   id: string;
   name: string;
@@ -34,8 +48,9 @@ export interface ArchiveData {
   shelves: Shelf[];
   folders: Folder[];
   documents: PromptDoc[];
+  presets: BlockPreset[];
 }
-export const blockLabels: Record<BlockKind, string> = {
+export const blockLabels: Record<BuiltinBlockKind, string> = {
   role: '角色设定',
   task: '任务描述',
   context: '背景信息',
@@ -43,7 +58,7 @@ export const blockLabels: Record<BlockKind, string> = {
   format: '输出格式',
   text: '自由文本',
 };
-export const blockTemplates: Record<BlockKind, string> = {
+export const blockTemplates: Record<BuiltinBlockKind, string> = {
   role: '你是一位{{角色}}，擅长将复杂的问题表达得清晰易懂。',
   task: '请围绕「{{主题}}」完成以下任务：',
   context: '目标受众是{{受众}}。请充分考虑他们的实际需求。',
@@ -51,10 +66,23 @@ export const blockTemplates: Record<BlockKind, string> = {
   format: '请使用 Markdown 格式，依次给出摘要、要点与建议。',
   text: '',
 };
-export function assemble(blocks: PromptBlock[]) {
+export function isBuiltinBlockKind(kind: unknown): kind is BuiltinBlockKind {
+  return typeof kind === 'string' && Object.hasOwn(blockLabels, kind);
+}
+export function blockTitle(block: PromptBlock, presets?: BlockPreset[]): string {
+  if (isBuiltinBlockKind(block.kind)) {
+    return blockLabels[block.kind];
+  }
+  if (block.presetId && presets?.length) {
+    const preset = presets.find((p) => p.id === block.presetId);
+    if (preset?.name) return preset.name;
+  }
+  return block.label?.trim() || '自定义模块';
+}
+export function assemble(blocks: PromptBlock[], presets?: BlockPreset[]) {
   return blocks
     .filter((b) => b.text.trim())
-    .map((b) => (b.kind === 'text' ? b.text : `## ${blockLabels[b.kind]}\n${b.text}`))
+    .map((b) => (b.kind === 'text' ? b.text : `## ${blockTitle(b, presets)}\n${b.text}`))
     .join('\n\n');
 }
 export function variables(text: string) {

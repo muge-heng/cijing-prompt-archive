@@ -1,6 +1,7 @@
 import { initialArchive } from './archive-seed';
+import { isBuiltinLabelCollision, normalizeHeading } from './archive-markdown';
 import {
-  blockLabels,
+  isBuiltinBlockKind,
   uid,
   type ArchiveData,
   type PromptBlock,
@@ -31,6 +32,7 @@ function sortArchive(data: ArchiveData): ArchiveData {
     documents: [...data.documents].sort(
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
     ),
+    presets: [...(data.presets || [])],
   };
 }
 
@@ -42,6 +44,7 @@ function cloneArchive(data: ArchiveData): ArchiveData {
       ...d,
       blocks: d.blocks.map((b) => ({ ...b })),
     })),
+    presets: (data.presets || []).map((p) => ({ ...p })),
   };
 }
 
@@ -108,15 +111,34 @@ function blocks(value: unknown): PromptBlock[] {
     throw new LocalInputError('每篇文档应包含 1 至 40 个模块。');
   }
   const out = value.map((item) => {
-    if (typeof item !== 'object' || !item || !Object.hasOwn(blockLabels, (item as { kind?: string }).kind ?? '')) {
+    if (typeof item !== 'object' || !item) {
       throw new LocalInputError('模块类型无效。');
     }
-    const candidate = item as { id: unknown; kind: PromptBlock['kind']; text: unknown };
-    return {
-      id: text(candidate.id, '模块编号', 100),
-      kind: candidate.kind,
-      text: text(candidate.text, '模块内容', 30000, true),
-    };
+    const candidate = item as Record<string, unknown>;
+    if (isBuiltinBlockKind(candidate.kind)) {
+      return {
+        id: text(candidate.id, '模块编号', 100),
+        kind: candidate.kind,
+        text: text(candidate.text, '模块内容', 30000, true),
+      } as PromptBlock;
+    }
+    if (candidate.kind === 'custom') {
+      const presetId =
+        candidate.presetId !== undefined && candidate.presetId !== null && candidate.presetId !== ''
+          ? text(candidate.presetId, '预设编号', 100)
+          : undefined;
+      const blockColor =
+        candidate.color !== undefined && candidate.color !== null ? color(candidate.color) : 'ochre';
+      return {
+        id: text(candidate.id, '模块编号', 100),
+        kind: 'custom',
+        label: text(candidate.label, '自定义模块标题', 24),
+        text: text(candidate.text, '模块内容', 30000, true),
+        ...(presetId ? { presetId } : {}),
+        color: blockColor,
+      } as PromptBlock;
+    }
+    throw new LocalInputError('模块类型无效。');
   });
   if (new Set(out.map((b) => b.id)).size !== out.length) {
     throw new LocalInputError('模块编号不能重复。');
@@ -214,8 +236,55 @@ export function mutateLocalArchive(value: unknown): { id: string | null; archive
     return { id, archive: persistArchive(data) };
   }
 
+  if (b.action === 'createPreset') {
+    const name = text(b.name, '板块名称', 24);
+    if (isBuiltinLabelCollision(name)) {
+      throw new LocalInputError('该名称与内置模块名称重复，请换一个名称。');
+    }
+    if (data.presets.length >= 60) {
+      throw new LocalInputError('最多可创建 60 个自定义板块预设。');
+    }
+    const norm = normalizeHeading(name).toLowerCase();
+    if (data.presets.some((p) => normalizeHeading(p.name).toLowerCase() === norm)) {
+      throw new LocalInputError('已存在同名板块预设。');
+    }
+    const id = uid();
+    data.presets.push({
+      id,
+      name,
+      template: text(b.template, '默认模板内容', 30000, true),
+      color: color(b.color),
+      createdAt: new Date().toISOString(),
+    });
+    return { id, archive: persistArchive(data) };
+  }
+
   const id = text(b.id, '编号', 100);
   switch (b.action) {
+    case 'updatePreset': {
+      const preset = assertExists(
+        data.presets.find((p) => p.id === id),
+        '板块预设',
+      );
+      const name = text(b.name, '板块名称', 24);
+      if (isBuiltinLabelCollision(name)) {
+        throw new LocalInputError('该名称与内置模块名称重复，请换一个名称。');
+      }
+      const norm = normalizeHeading(name).toLowerCase();
+      if (data.presets.some((p) => p.id !== id && normalizeHeading(p.name).toLowerCase() === norm)) {
+        throw new LocalInputError('已存在同名板块预设。');
+      }
+      preset.name = name;
+      preset.template = text(b.template, '默认模板内容', 30000, true);
+      preset.color = color(b.color);
+      return { id, archive: persistArchive(data) };
+    }
+    case 'deletePreset': {
+      const idx = data.presets.findIndex((p) => p.id === id);
+      assertExists(idx >= 0 ? data.presets[idx] : undefined, '板块预设');
+      data.presets.splice(idx, 1);
+      return { id, archive: persistArchive(data) };
+    }
     case 'favorite': {
       if (typeof b.favorite !== 'boolean') {
         throw new LocalInputError('收藏状态无效。');

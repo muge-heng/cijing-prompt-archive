@@ -710,6 +710,18 @@
   .editor-count {
     font-size: 9.5px;
   }
+  .unmatched-callout,
+  .fulltext-sync-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .module-palette {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .preset-manager-body,
+  .unmatched-dialog-body {
+    padding: 15px 18px;
+  }
   .mini-section .subtle {
     font-size: 8.5px;
   }

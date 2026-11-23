@@ -117,7 +117,7 @@ export function DocumentList({
                 className="icon-button quick-copy"
                 title="一键复制提示词"
                 aria-label={`复制${doc.title}`}
-                onClick={() => void onCopy(assemble(doc.blocks))}
+                onClick={() => void onCopy(assemble(doc.blocks, data.presets))}
               >
                 <Icon name="copy" size={14} />
               </button>

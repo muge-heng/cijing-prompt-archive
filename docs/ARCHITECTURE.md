@@ -44,7 +44,8 @@
 │   ├── components/
 │   │   ├── archive-app.tsx         # 工作台主容器与全局状态中心
 │   │   ├── archive-select.tsx      # 纸质黄铜风自定义可访问下拉选择器（替代原生 select）
-│   │   ├── editor.tsx              # 居中式双栏对照文档工作台（双栏对照 / 模块编辑 / 变量调试）
+│   │   ├── editor.tsx              # 居中式双栏对照文档工作台（双栏对照 / 模块编辑 / 变量调试 / 完整输入）
+│   │   ├── preset-dialog.tsx       # 自定义板块预设库与未匹配 Markdown 标题处理弹窗
 │   │   ├── archive-dialogs.tsx     # 实体表单弹窗、仓库设置弹窗、全局搜索弹窗
 │   │   ├── dialog.tsx              # 无障碍 Overlay 与 Dialog 基础容器（焦点陷阱/滚动锁定）
 │   │   ├── document-list.tsx       # 文档表格视图、纸页微缩图标、相对时间格式化
@@ -54,8 +55,9 @@
 │   │   ├── index.ts                # pg.Pool 单例连接与 Drizzle 实例导出
 │   │   └── schema.ts               # archive_meta / archive_shelves / archive_folders / archive_documents 表定义
 │   └── lib/
-│       ├── archive-types.ts        # 领域模型、模块标签/模板、拼装与 {{变量}} 引擎
-│       ├── archive-store.ts        # PostgreSQL 事务初始化、输入校验与 Drizzle CRUD
+│       ├── archive-types.ts        # 领域模型、模块标签/模板/自定义预设、拼装与 {{变量}} 引擎
+│       ├── archive-markdown.ts     # 完整提示词 Markdown 标题智能解析与模块双向无损同步
+│       ├── archive-store.ts        # PostgreSQL 事务初始化、输入校验与 Drizzle CRUD（含 presets）
 │       ├── archive-seed.ts         # 初始 3 货架 / 9 文件夹 / 24 篇示例馆藏生成器
 │       ├── archive-navigation.ts   # URL query 与 legacy hash 视图双向解析
 │       └── archive-dates.ts        # 亚洲/上海时区问候语、公历与农历日期转换
@@ -147,7 +149,7 @@ erDiagram
 
 关键约束与初始化机制：
 - **级联删除与索引**：`archive_folders.shelf_id` 与 `archive_documents.folder_id` 均配置 `onDelete: 'cascade'`，并分别建立索引 `archive_folders_shelf_idx` 与 `archive_documents_folder_idx`。删除货架或文件夹时，数据库自动清理下属记录；前端在删除前会统计受影响文档数量并二次确认。
-- **单次幂等初始化（`seedOnce`）**：`src/lib/archive-store.ts` 在模块内缓存 `initialized` Promise，并在 PostgreSQL 事务中通过 `pg_advisory_xact_lock(71120317)` 加咨询锁检查 `archive_meta.key = 'initialized'`。仅当未初始化时写入 `initialArchive()` 的 3 个货架、9 个文件夹与 24 篇示例提示词，确保并发冷启动不重复插入。
+- **单次幂等初始化（`seedOnce`）与自定义板块预设持久化**：`src/lib/archive-store.ts` 在模块内缓存 `initialized` Promise，并在 PostgreSQL 事务中通过 `pg_advisory_xact_lock(71120317)` 加咨询锁检查 `archive_meta.key = 'initialized'`；自定义板块预设（`BlockPreset[]`）以 JSON 形式持久化于 `archive_meta.key = 'block_presets'`（静态模式存于 `localStorage['archive-data-v1'].presets`），无需修改数据库表结构。
 - **排序规则（`readArchive`）**：货架与文件夹均按 `(position ASC, id ASC)` 排序；文档按 `updatedAt DESC` 排序。
 
 ### 3.3 写接口契约与输入校验（`POST /api/archive` & `mutateArchive`）
@@ -155,7 +157,7 @@ erDiagram
 `src/app/api/archive/route.ts` 对变更请求依次执行：
 1. **同源保护**：校验 `Origin` Header 的 `host` 与 `X-Forwarded-Host` / `Host` / `request.url` 是否一致，不匹配返回 `403`。
 2. **载荷大小限制**：请求体原文超过 `1,400,000` 字符返回 `413`；JSON 解析失败返回 `400`。
-3. **11 类业务操作与约束**：
+3. **14 类业务操作与约束**：
 
 | `action` | 关键参数与校验规则 | 副作用说明 |
 | --- | --- | --- |
@@ -165,7 +167,10 @@ erDiagram
 | `createFolder` | `shelfId`（需存在）、`name`（1–30 字符）、`description`（选填，≤160 字符） | 在指定货架下新增文件夹 |
 | `updateFolder` | `id`、`name`（1–30）、`description`（选填，≤160） | 更新文件夹名称与说明 |
 | `deleteFolder` | `id` | 级联删除下属文档 |
-| `saveDoc` | `folderId`（需存在）、`title`（1–100）、`synopsis`（选填，≤300）、`blocks`（1–40 个模块，ID 唯一且 ≤100，内容 ≤30000，至少 1 个非空模块） | 新建或更新文档（支持跨文件夹移动），刷新 `updatedAt` |
+| `saveDoc` | `folderId`（需存在）、`title`（1–100）、`synopsis`（选填，≤300）、`blocks`（1–40 个模块，支持内置 6 类或 `custom` 自定义模块 `label` 1–24 字符，ID 唯一且 ≤100，内容 ≤30000，至少 1 个非空模块） | 新建或更新文档（支持跨文件夹移动），刷新 `updatedAt` |
+| `createPreset` | `name`（1–24 字符，不与内置模块/已有预设重名，上限 60 个）、`template`（选填，≤30000）、`color`（5 色枚举） | 新增可复用板块预设 |
+| `updatePreset` | `id`、`name`、`template`、`color` | 更新已有板块预设 |
+| `deletePreset` | `id` | 移除板块预设（不破坏已有文档的自定义模块快照） |
 | `open` | `id` | 更新 `lastOpened` 为当前 ISO 时间 |
 | `favorite` | `id`、`favorite`（布尔值） | 切换收藏标记 |
 | `duplicate` | `id` | 复制原文档标题（截断至 94 字符 + ` · 副本`）、摘要与模块列表生成新文档 |
@@ -207,7 +212,8 @@ flowchart TD
 - **URL 双向路由（`src/lib/archive-navigation.ts`）**：支持 `?view=...&id=...` 查询参数，并向后兼容旧版 `#kind/id` Hash 书签。点击导航使用 `history.pushState` 更新地址并滚动至顶部，监听 `popstate` 与 `hashchange` 恢复状态；若 URL 指向已删除的货架/文件夹，`resolveView()` 自动回退至 `overview`。
 - **工作台编辑与草稿保护（`src/components/editor.tsx`）**：
   - 桌面端（`>=1024px`）采用居中宽幅案台布局，默认启用「双栏对照」模式（左侧独立滚动编排模块，右侧实时输入变量并渲染方格稿纸成稿预览），也可切换专注的「模块编辑」或两栏式「变量调试」实验室；窄屏与移动端（`<1024px`）自动回退为全屏单栏标签页切换。
-  - 支持 6 种模块类型：`role`（角色设定）、`task`（任务描述）、`context`（背景信息）、`rules`（约束条件）、`format`（输出格式）、`text`（自由文本），并支持在标题区直接编辑文档摘要（`synopsis`）。
+  - 支持 6 种内置模块类型（`role`、`task`、`context`、`rules`、`format`、`text`）与用户自定义的 `custom` 模块/可复用板块预设（`BlockPreset`），并支持在标题区直接编辑文档摘要（`synopsis`）。
+  - 写作区提供「模块化编辑」与「完整输入」双模式并实现双向无损互通：在「完整输入」中可通过 `## 标题` 一次输入整篇提示词，由 `parseFullTextPrompt` 忽略围栏代码块内的 `#` 注释并按「自定义预设 -> 内置模块及中英文别名 -> 文档已有自定义模块」优先级智能匹配；未匹配标题将在同步或保存前弹窗引导新建为模块并可选存入预设库，同时右侧实时预览与变量调试始终基于单一权威模块视图实时计算，避免状态冲突。
   - 拼装函数 `assemble(blocks)` 过滤空白模块，除 `text` 外统一输出 `## <模块标签>\n<内容>` 并以 `\n\n` 拼接。
   - 变量引擎通过正则 `/\{\{\s*([^{}]+?)\s*\}\}/g` 提取去重后的变量名；`renderPrompt()` 进行离线替换，`preview-paper` 使用 `<mark>` 高亮尚未替换的 `{{占位符}}`。
   - 通过对比 `title`、`synopsis`、`folderId` 与 `JSON.stringify(blocks)` 计算 `dirty` 状态，关闭未保存修改时触发「离开这份草稿？」二次确认弹窗。

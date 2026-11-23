@@ -314,7 +314,7 @@ export function SearchDialog({
   const shelves = q ? data.shelves.filter((s) => (s.name + s.english).toLowerCase().includes(q)) : [],
     folders = q ? data.folders.filter((f) => (f.name + f.description).toLowerCase().includes(q)) : [];
   const docs = data.documents
-    .filter((d) => !q || (d.title + d.synopsis + assemble(d.blocks)).toLowerCase().includes(q))
+    .filter((d) => !q || (d.title + d.synopsis + assemble(d.blocks, data.presets)).toLowerCase().includes(q))
     .slice(0, q ? 20 : 5);
   const openFirst = () => {
     if (shelves[0]) onShelf(shelves[0].id);

@@ -234,5 +234,6 @@ export function initialArchive(now = Date.now()): ArchiveData {
         lastOpened: null,
       };
     }),
+    presets: [],
   };
 }
