@@ -3,7 +3,7 @@
   font-family: 'Archive Serif';
   font-weight: 600 800;
   font-display: swap;
-  src: url('/fonts/archive-serif-0.ttf');
+  src: url('../../public/fonts/archive-serif-0.ttf') format('truetype');
   unicode-range:
     U+3002, U+4E00, U+4E0A, U+4E0B, U+4E2A, U+4E2D, U+4E86, U+4E8B, U+4ED3, U+4EE3, U+4EF6, U+4EFD, U+4F5C,
     U+4FDD, U+50CF, U+5165, U+5168, U+5177, U+5185, U+5199, U+521B, U+5220, U+522B, U+5348, U+53D1, U+53D8,
@@ -21,7 +21,7 @@
   font-family: 'Archive Sans';
   font-weight: 100 549;
   font-display: swap;
-  src: url('/fonts/archive-sans-0.ttf');
+  src: url('../../public/fonts/archive-sans-0.ttf') format('truetype');
   unicode-range:
     U+3001, U+3002, U+300C, U+300D, U+4E00, U+4E03, U+4E09, U+4E0A, U+4E0B, U+4E0D, U+4E0E, U+4E13, U+4E14,
     U+4E16, U+4E25, U+4E2A, U+4E2D, U+4E3A, U+4E3B, U+4E45, U+4E49, U+4E4B, U+4E5D, U+4E60, U+4E66, U+4E86,
@@ -63,7 +63,7 @@
   font-family: 'Archive Sans';
   font-weight: 100 549;
   font-display: swap;
-  src: url('/fonts/archive-sans-1.ttf');
+  src: url('../../public/fonts/archive-sans-1.ttf') format('truetype');
   unicode-range:
     U+79F0, U+79FB, U+7A0B, U+7A3F, U+7A76, U+7A7A, U+7A81, U+7A97, U+7ACB, U+7AE0, U+7AEF, U+7B26, U+7B2C,
     U+7B49, U+7B56, U+7B5B, U+7B80, U+7B97, U+7BA1, U+7BC7, U+7C4D, U+7C7B, U+7CBE, U+7CCA, U+7CFB, U+7D22,
@@ -88,7 +88,7 @@
   font-family: 'Archive Sans';
   font-weight: 550 900;
   font-display: swap;
-  src: url('/fonts/archive-sans-semibold-0.ttf');
+  src: url('../../public/fonts/archive-sans-semibold-0.ttf') format('truetype');
   unicode-range:
     U+3001, U+3002, U+300C, U+300D, U+4E00, U+4E03, U+4E09, U+4E0A, U+4E0B, U+4E0D, U+4E0E, U+4E13, U+4E14,
     U+4E16, U+4E25, U+4E2A, U+4E2D, U+4E3A, U+4E3B, U+4E45, U+4E49, U+4E4B, U+4E5D, U+4E60, U+4E66, U+4E86,
@@ -130,7 +130,7 @@
   font-family: 'Archive Sans';
   font-weight: 550 900;
   font-display: swap;
-  src: url('/fonts/archive-sans-semibold-1.ttf');
+  src: url('../../public/fonts/archive-sans-semibold-1.ttf') format('truetype');
   unicode-range:
     U+79F0, U+79FB, U+7A0B, U+7A3F, U+7A76, U+7A7A, U+7A81, U+7A97, U+7ACB, U+7AE0, U+7AEF, U+7B26, U+7B2C,
     U+7B49, U+7B56, U+7B5B, U+7B80, U+7B97, U+7BA1, U+7BC7, U+7C4D, U+7C7B, U+7CBE, U+7CCA, U+7CFB, U+7D22,

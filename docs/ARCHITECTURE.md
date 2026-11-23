@@ -10,7 +10,7 @@
 
 | 类别 | 技术选型 | 版本（来自 `package.json`） | 说明 |
 | --- | --- | --- | --- |
-| 应用框架 | Next.js（App Router） | `16.4.2` | 支持服务端动态渲染、API Route Handlers 与静态导出双模式 |
+| 应用框架 | Next.js（App Router） | `16.4.5` | 支持服务端动态渲染、API Route Handlers 与静态导出双模式 |
 | UI 运行时 | React / React DOM | `19.2.6` | 服务端首屏快照注入 + 客户端全量交互工作台 |
 | 类型系统 | TypeScript | `5.9.3` | 开启 `strict: true`，前后端共享类型与纯函数工具 |
 | 样式方案 | Tailwind CSS v4 + 自定义 CSS 设计系统 | `4.1.17` | `@import 'tailwindcss'` 搭配 `globals / workspace / workbench / responsive / fonts.css` |
@@ -26,8 +26,8 @@
 .
 ├── public/
 │   ├── archive.svg                 # 应用 Favicon（等距木质索引柜矢量图标）
-│   ├── fonts/                      # 字体许可声明（notosanssc-OFL.txt / notoserifsc-OFL.txt）
-│   └── images/                     # 轻拟物 SVG 滤镜纹理（grain.svg、wood.svg）
+│   ├── fonts/                      # 本地 Noto Serif/Sans SC 字体子集（5 份 .ttf）与 OFL 许可声明
+│   └── images/                     # 档案室日/夜景插画（archive-room*.jpg）与轻拟物 SVG 纹理（grain.svg、wood.svg）
 ├── src/
 │   ├── app/
 │   │   ├── api/
@@ -251,9 +251,10 @@ flowchart TD
 
 在对初始原型进行逐行审读时，发现以下现状与潜在改进点，供后续迭代优先处理：
 
-1. **缺失的二进制字体与插画素材（高优先级）**：
-   - `src/app/fonts.css` 引用了 `/fonts/archive-serif-0.ttf`、`/fonts/archive-sans-{0,1}.ttf`、`/fonts/archive-sans-semibold-{0,1}.ttf`；`src/app/workspace.css` 引用了 `/images/archive-room.jpg` 与 `/images/archive-room-night.jpg`。
-   - 当前解压出的 `public/fonts/` 仅有许可证 `.txt` 文件，`public/images/` 仅有 `grain.svg` 与 `wood.svg`（上述字体与插画二进制文件未包含在初始压缩包中）。浏览器目前会回退到系统衬线/无衬线字体，英雄区右侧插画位置为空白底纹。建议后续补充对应字体子集文件及日/夜档案室插画，或改为内置 SVG/渐变艺术底图。
+1. **本地字体子集与插画资源已补齐**：
+   - `public/images/archive-room.jpg` 与 `public/images/archive-room-night.jpg` 已就位，对应欢迎区日景/夜景插画。
+   - 已基于 SIL OFL 开源 Noto Serif SC / Noto Sans SC 生成 `public/fonts/archive-serif-0.ttf`、`archive-sans-{0,1}.ttf`、`archive-sans-semibold-{0,1}.ttf` 共 5 份精确覆盖 `unicode-range` 的本地子集字体，并在 `src/app/fonts.css` 中采用相对模块路径由 Next.js 自动打包并适配子路径 `basePath`。
+   - 后续若新增界面高频文案汉字，可同步扩展 `src/app/fonts.css` 的 `unicode-range` 并重新子集化对应 `.ttf`。
 2. **模块拆分与可维护性**：
    - `src/components/archive-app.tsx` 达 957 行，集成了视图路由、数据变更队列、筛选排序、侧边栏、主内容区、上下文菜单、确认弹窗与 Toast。后续迭代（如引入标签、版本历史、批量操作）建议拆分为 `Sidebar`、`Topbar`、`OverviewSection`、`CollectionSection`、`ContextMenu` 与自定义 Hook `useArchiveState` / `useArchivePreferences`。
 3. **元数据与工程细节**：
