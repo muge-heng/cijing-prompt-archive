@@ -30,6 +30,10 @@
   --sans: Arial, 'Archive Sans', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   --sidebar-width: 218px;
+  --img-grain: url('/images/grain.svg');
+  --img-wood: url('/images/wood.svg');
+  --img-room-day: url('/images/archive-room.jpg');
+  --img-room-night: url('/images/archive-room-night.jpg');
 }
 html[data-theme='dark'] {
   color-scheme: dark;

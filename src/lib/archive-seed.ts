@@ -1,6 +1,6 @@
 import type { ArchiveData, PromptBlock } from './archive-types';
 
-export function initialArchive(): ArchiveData {
+export function initialArchive(now = Date.now()): ArchiveData {
   const shelves: ArchiveData['shelves'] = [
     { id: 's-writing', name: '创意写作', english: 'CREATIVE WRITING', color: 'moss', position: 0 },
     { id: 's-design', name: '视觉设计', english: 'VISUAL DESIGN', color: 'walnut', position: 1 },
@@ -211,7 +211,6 @@ export function initialArchive(): ArchiveData {
       '一句话定义、具体例子、常见误解与小练习。',
     ],
   ];
-  const now = Date.now();
   return {
     shelves,
     folders,

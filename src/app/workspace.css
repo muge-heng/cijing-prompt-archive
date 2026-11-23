@@ -8,7 +8,7 @@
   inset: 0;
   z-index: 150;
   pointer-events: none;
-  background-image: url('/images/grain.svg');
+  background-image: var(--img-grain);
   opacity: 0.105;
   mix-blend-mode: multiply;
 }
@@ -177,7 +177,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: url('/images/grain.svg');
+  background: var(--img-grain);
   opacity: 0.3;
   pointer-events: none;
 }
@@ -445,14 +445,14 @@
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(90deg, #f2f2e8 3%, #f0f0e4 35%, #eeeddf 70%, #e7e6d7), url('/images/grain.svg');
+    linear-gradient(90deg, #f2f2e8 3%, #f0f0e4 35%, #eeeddf 70%, #e7e6d7), var(--img-grain);
 }
 .welcome-hero::after {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background-image: url('/images/grain.svg');
+  background-image: var(--img-grain);
   opacity: 0.2;
   mix-blend-mode: multiply;
 }
@@ -463,7 +463,7 @@
   bottom: 0;
   right: 0;
   width: 58.5%;
-  background: url('/images/archive-room.jpg') right bottom / 100% 100% no-repeat;
+  background: var(--img-room-day) right bottom / 100% 100% no-repeat;
   mix-blend-mode: multiply;
   mask-image: linear-gradient(90deg, transparent, #000 19%);
   opacity: 0.96;
@@ -669,7 +669,7 @@
   position: absolute;
   inset: 0;
   z-index: -1;
-  background-image: url('/images/wood.svg');
+  background-image: var(--img-wood);
   background-size: 320px 130px;
   opacity: 0.8;
   mix-blend-mode: soft-light;
@@ -804,7 +804,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: url('/images/grain.svg');
+  background: var(--img-grain);
   opacity: 0.65;
   mix-blend-mode: multiply;
 }
@@ -1047,7 +1047,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: url('/images/grain.svg');
+  background: var(--img-grain);
   opacity: 0.17;
   pointer-events: none;
 }
@@ -1133,7 +1133,7 @@
   position: absolute;
   inset: 0;
   opacity: 0.15;
-  background: url('/images/grain.svg');
+  background: var(--img-grain);
   pointer-events: none;
 }
 .folder-card-top {
@@ -1280,7 +1280,7 @@
 }
 .room-entering .welcome-hero::after {
   background-image:
-    linear-gradient(105deg, transparent 30%, #e9d9a95c 46%, transparent 60%), url('/images/grain.svg');
+    linear-gradient(105deg, transparent 30%, #e9d9a95c 46%, transparent 60%), var(--img-grain);
   background-size:
     200% 100%,
     180px 180px;
@@ -1332,7 +1332,7 @@
   background: linear-gradient(90deg, #30362b, #2d3128);
 }
 [data-theme='dark'] .hero-art {
-  background-image: url('/images/archive-room-night.jpg');
+  background-image: var(--img-room-night);
   mix-blend-mode: normal;
   filter: none;
   opacity: 1;

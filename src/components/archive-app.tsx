@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { assemble, uid, type ArchiveData, type PromptDoc } from '@/lib/archive-types';
+import { mutateLocalArchive, readLocalArchive } from '@/lib/archive-local-store';
 import { archiveDate } from '@/lib/archive-dates';
 import { ArchiveMark, Icon, type IconName } from './icons';
 import { ShelfCard } from './shelf-card';
@@ -23,6 +24,7 @@ const navItems: { kind: 'overview' | 'all' | 'favorites' | 'recent'; icon: IconN
   { kind: 'favorites', icon: 'star' },
   { kind: 'recent', icon: 'history' },
 ];
+const isStaticMode = process.env.NEXT_PUBLIC_STATIC_EXPORT === 'true';
 const defaults: Preferences = { theme: 'light', entrance: true, motion: true };
 function section(title: string, en: string, action?: ReactNode) {
   return (
@@ -102,7 +104,13 @@ export function ArchiveApp({
       document.documentElement.dataset.theme = p.theme;
       document.documentElement.dataset.motion = p.motion ? 'on' : 'off';
       setEntering(p.entrance && p.motion);
-      if (window.location.hash) setView(viewFromLocation(new URL(window.location.href)));
+      if (isStaticMode) {
+        setData(readLocalArchive());
+        setNow(Date.now());
+      }
+      if (window.location.hash || (isStaticMode && window.location.search)) {
+        setView(viewFromLocation(new URL(window.location.href)));
+      }
     });
     const back = () => {
       setView(viewFromLocation(new URL(window.location.href)));
@@ -195,6 +203,15 @@ export function ArchiveApp({
     const seq = ++sequence.current;
     setPending((p) => p + 1);
     try {
+      if (isStaticMode) {
+        const result = mutateLocalArchive(body);
+        if (seq >= lastApplied.current) {
+          setData(result.archive);
+          lastApplied.current = seq;
+        }
+        setSyncError(false);
+        return result.id;
+      }
       const response = await fetch('/api/archive', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
