@@ -39,12 +39,12 @@
 │   │   ├── fonts.css               # 本地字体 @font-face 与 Unicode-range 声明
 │   │   ├── globals.css             # CSS 设计 Token、双主题变量、基础按钮与关键帧动画
 │   │   ├── workspace.css           # 侧边栏、欢迎牌、货架抽屉、文件夹卡片与文档列表样式
-│   │   ├── workbench.css           # 弹层、设置面板、全局搜索框、右侧工作台与变量调试样式
+│   │   ├── workbench.css           # 弹层、设置面板、全局搜索框、居中双栏工作台与变量调试样式
 │   │   └── responsive.css          # 桌面宽屏/紧凑屏/平板抽屉/移动端适配与降动效规则
 │   ├── components/
 │   │   ├── archive-app.tsx         # 工作台主容器与全局状态中心
 │   │   ├── archive-select.tsx      # 纸质黄铜风自定义可访问下拉选择器（替代原生 select）
-│   │   ├── editor.tsx              # 右侧文档工作台（模块编辑 + 本地变量调试）
+│   │   ├── editor.tsx              # 居中式双栏对照文档工作台（双栏对照 / 模块编辑 / 变量调试）
 │   │   ├── archive-dialogs.tsx     # 实体表单弹窗、仓库设置弹窗、全局搜索弹窗
 │   │   ├── dialog.tsx              # 无障碍 Overlay 与 Dialog 基础容器（焦点陷阱/滚动锁定）
 │   │   ├── document-list.tsx       # 文档表格视图、纸页微缩图标、相对时间格式化
@@ -193,7 +193,7 @@ flowchart TD
     MainView -- "all / favorites / recent / shelf / folder" --> FilterBar["关键词筛选 + 货架过滤 + 排序"] --> FullList["DocumentList"]
 
     ArchiveApp --> Modals["全局浮层与菜单"]
-    Modals --> DocumentEditor["DocumentEditor\n模块拼装 + 变量调试"]
+    Modals --> DocumentEditor["DocumentEditor\n桌面居中双栏对照 + 模块拼装 + 变量调试"]
     Modals --> SearchDialog["SearchDialog\n跨货架/文件夹/全文检索"]
     Modals --> Settings["Settings\n双主题 · 入仓/界面动效开关"]
     Modals --> EntityDialog["EntityDialog\n新建/编辑货架与文件夹"]
@@ -206,10 +206,11 @@ flowchart TD
 - **乐观收藏与并发防重入**：`favorite()` 通过 `pendingStars`（`Set<string>`）锁定单篇文档的并发点击，先在本地立即翻转 `favorite` 状态，请求失败时精准回滚。
 - **URL 双向路由（`src/lib/archive-navigation.ts`）**：支持 `?view=...&id=...` 查询参数，并向后兼容旧版 `#kind/id` Hash 书签。点击导航使用 `history.pushState` 更新地址并滚动至顶部，监听 `popstate` 与 `hashchange` 恢复状态；若 URL 指向已删除的货架/文件夹，`resolveView()` 自动回退至 `overview`。
 - **工作台编辑与草稿保护（`src/components/editor.tsx`）**：
-  - 支持 6 种模块类型：`role`（角色设定）、`task`（任务描述）、`context`（背景信息）、`rules`（约束条件）、`format`（输出格式）、`text`（自由文本）。
+  - 桌面端（`>=1024px`）采用居中宽幅案台布局，默认启用「双栏对照」模式（左侧独立滚动编排模块，右侧实时输入变量并渲染方格稿纸成稿预览），也可切换专注的「模块编辑」或两栏式「变量调试」实验室；窄屏与移动端（`<1024px`）自动回退为全屏单栏标签页切换。
+  - 支持 6 种模块类型：`role`（角色设定）、`task`（任务描述）、`context`（背景信息）、`rules`（约束条件）、`format`（输出格式）、`text`（自由文本），并支持在标题区直接编辑文档摘要（`synopsis`）。
   - 拼装函数 `assemble(blocks)` 过滤空白模块，除 `text` 外统一输出 `## <模块标签>\n<内容>` 并以 `\n\n` 拼接。
   - 变量引擎通过正则 `/\{\{\s*([^{}]+?)\s*\}\}/g` 提取去重后的变量名；`renderPrompt()` 进行离线替换，`preview-paper` 使用 `<mark>` 高亮尚未替换的 `{{占位符}}`。
-  - 通过对比 `title`、`folderId` 与 `JSON.stringify(blocks)` 计算 `dirty` 状态，关闭未保存修改时触发「离开这份草稿？」二次确认弹窗。
+  - 通过对比 `title`、`synopsis`、`folderId` 与 `JSON.stringify(blocks)` 计算 `dirty` 状态，关闭未保存修改时触发「离开这份草稿？」二次确认弹窗。
 - **无障碍与键盘快捷键**：
   - `Overlay`（`src/components/dialog.tsx`）维护全局引用计数 `openCount` 锁定 `body` 滚动，支持 `[data-autofocus]` 自动聚焦、顶层浮层 `Tab` 焦点循环、`Esc` 逐层关闭（仅响应最顶层 `[data-overlay-panel]`），并在卸载时把焦点归还至触发元素。
   - 全局支持 `Ctrl / ⌘ + K` 唤起搜索、`Ctrl / ⌘ + S` 保存文档（编辑器内）、`Esc` 关闭菜单或移动端抽屉。
