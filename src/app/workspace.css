@@ -92,7 +92,7 @@
   min-height: 39px;
   padding: 7px 12px;
   text-align: left;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--font-scale));
   letter-spacing: 0.25px;
   color: #5d6257;
   border-radius: 5px;
@@ -181,7 +181,7 @@
   flex: 1;
   min-width: 0;
   margin: 0;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--font-scale));
   min-height: 36px;
   gap: 11px;
   padding-right: 4px;
@@ -276,7 +276,7 @@
   min-height: 30px;
   padding: 4px 8px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   color: var(--muted);
   text-align: left;
 }
@@ -449,7 +449,7 @@
   gap: 11px;
   width: 100%;
   padding: 9px 9px 12px;
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   color: var(--muted);
 }
 .settings-link > .icon:last-child {
@@ -546,7 +546,7 @@
   gap: 9px;
   padding: 8px 9px;
   border-radius: 5px;
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   color: var(--ink);
   text-align: left;
 }
@@ -593,13 +593,13 @@
   align-items: center;
 }
 .breadcrumbs {
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
   gap: 12px;
   white-space: nowrap;
   min-width: 0;
 }
 .breadcrumbs strong {
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -769,7 +769,7 @@
 }
 .hero-copy > p {
   margin-top: 4px;
-  font-size: 13.5px;
+  font-size: calc(13.5px * var(--font-scale));
   letter-spacing: 0.8px;
   color: #727764;
 }
@@ -856,7 +856,7 @@
 }
 .section-heading h2 {
   font-family: var(--serif);
-  font-size: 22px;
+  font-size: calc(22px * var(--font-scale));
   letter-spacing: 0.85px;
   font-weight: 650;
   line-height: 1.5;
@@ -1201,7 +1201,7 @@
 }
 .document-name strong {
   display: block;
-  font-size: 14px;
+  font-size: calc(14px * var(--font-scale));
   font-weight: 550;
   letter-spacing: 0.3px;
   text-overflow: ellipsis;
@@ -1213,7 +1213,7 @@
   align-items: center;
   gap: 4px;
   margin-top: 2px;
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
   color: var(--faint);
   letter-spacing: 0.2px;
 }
@@ -1239,7 +1239,7 @@
 }
 .document-date {
   color: var(--muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
 }
 .row-actions {
   display: flex;
@@ -1318,7 +1318,7 @@
 .collection-heading h1 {
   font-family: var(--serif);
   font-weight: 650;
-  font-size: 32px;
+  font-size: calc(32px * var(--font-scale));
   line-height: 1.6;
   letter-spacing: 1.4px;
   margin-top: 6px;
@@ -1328,7 +1328,7 @@
   color: var(--brass);
 }
 .collection-heading p {
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   color: var(--muted);
   margin-top: 4px;
 }
@@ -1428,13 +1428,14 @@
   font-family: var(--serif);
   color: #464b3e;
   font-weight: 600;
-  font-size: 19px;
+  font-size: calc(19px * var(--font-scale));
   margin: 8px 0 3px;
 }
 .folder-sheet > p {
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
   color: #7e806e;
-  height: 34px;
+  min-height: 34px;
+  padding-bottom: 6px;
 }
 .folder-card-bottom {
   display: flex;
@@ -1468,7 +1469,7 @@
 .list-search input {
   min-width: 0;
   width: 100%;
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   outline: 0;
   background: none;
   color: var(--ink);
@@ -1520,12 +1521,12 @@
 .empty-state h3,
 .search-empty h3 {
   font-family: var(--serif);
-  font-size: 18px;
+  font-size: calc(18px * var(--font-scale));
   font-weight: 600;
 }
 .empty-state p,
 .search-empty p {
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   color: var(--muted);
   margin-top: 7px;
 }

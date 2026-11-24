@@ -40,7 +40,7 @@
 }
 .dialog-heading h2 {
   font-family: var(--serif);
-  font-size: 23px;
+  font-size: calc(23px * var(--font-scale));
   font-weight: 650;
   letter-spacing: 1.2px;
   line-height: 1.6;
@@ -48,7 +48,7 @@
 }
 .dialog-copy {
   color: var(--muted);
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   line-height: 1.9;
   padding: 23px 25px;
 }
@@ -70,7 +70,7 @@
 }
 .field-label {
   display: block;
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   font-weight: 550;
   letter-spacing: 0.1px;
   color: var(--ink);
@@ -102,7 +102,7 @@
   border: 1px solid var(--line);
   border-radius: 5px;
   outline: 0;
-  font-size: 13px;
+  font-size: calc(13px * var(--content-scale));
   line-height: 1.65;
   font-weight: 400;
   box-shadow: inset 0 1px 2px #242b2005;
@@ -276,12 +276,12 @@ textarea {
   border-bottom: 1px solid var(--line-soft);
 }
 .setting-row strong {
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   font-weight: 550;
 }
 .setting-row p {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: calc(10.5px * var(--font-scale));
   margin-top: 2px;
 }
 .toggle {
@@ -317,7 +317,7 @@ textarea {
   border-radius: 5px;
   background: var(--inset);
   color: var(--muted);
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
 }
 .shortcut-note > span {
   display: flex;
@@ -357,7 +357,7 @@ textarea {
   outline: none;
   background: transparent;
   color: var(--ink);
-  font-size: 15px;
+  font-size: calc(15px * var(--font-scale));
 }
 .search-input-wrap input:focus-visible {
   outline: 0;
@@ -406,11 +406,11 @@ textarea {
   min-width: 0;
 }
 .search-result strong {
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   font-weight: 550;
 }
 .search-result small {
-  font-size: 10px;
+  font-size: calc(10px * var(--font-scale));
   color: var(--muted);
 }
 .search-result > .icon:last-child {
@@ -609,7 +609,7 @@ textarea {
   width: 100%;
   margin: 0 0 4px;
   font-family: var(--serif);
-  font-size: clamp(22px, 1.85vw, 29px);
+  font-size: clamp(calc(22px * var(--font-scale)), 1.85vw, calc(29px * var(--font-scale)));
   font-weight: 600;
   border: 0;
   border-bottom: 1px dashed transparent;
@@ -629,7 +629,7 @@ textarea {
   border-bottom: 1px dashed transparent;
   background: none;
   color: var(--muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   line-height: 1.7;
   padding: 1px 0 2px;
   outline: 0;
@@ -813,7 +813,7 @@ textarea {
   border-bottom: 1px solid var(--line-soft);
 }
 .block-heading strong {
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
   font-weight: 550;
 }
 .block-number {
@@ -839,7 +839,7 @@ textarea {
   color: var(--ink);
   border: 0;
   min-height: 74px;
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--content-scale));
   line-height: 1.95;
 }
 .prompt-block:focus-within {
@@ -857,7 +857,7 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   color: var(--muted);
 }
 .add-block-button:hover {
@@ -1034,7 +1034,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: calc(11px * var(--font-scale));
 }
 .variable-field {
   margin-bottom: 12px;
@@ -1042,11 +1042,11 @@ textarea {
 .variable-field textarea {
   min-height: 45px;
   max-height: 130px;
-  font-size: 12px;
+  font-size: calc(12px * var(--content-scale));
 }
 .debug-empty {
   color: var(--muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   margin-bottom: 13px;
 }
 .debug-report {
@@ -1057,7 +1057,7 @@ textarea {
   padding: 10px 12px;
   color: var(--accent);
   background: var(--accent-soft);
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   border-radius: 4px;
 }
 .debug-report.warning {
@@ -1074,7 +1074,7 @@ textarea {
   overflow-wrap: anywhere;
   padding: 19px 20px;
   font-family: var(--sans);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--content-scale));
   line-height: 2;
   min-height: 220px;
   color: var(--ink);
@@ -1086,9 +1086,9 @@ textarea {
     0 1px 3px var(--shadow);
   background-image: repeating-linear-gradient(
     transparent 0,
-    transparent 24px,
-    color-mix(in srgb, var(--line) 35%, transparent) 24px,
-    color-mix(in srgb, var(--line) 35%, transparent) 25px
+    transparent calc(25px * var(--content-scale) - 1px),
+    color-mix(in srgb, var(--line) 35%, transparent) calc(25px * var(--content-scale) - 1px),
+    color-mix(in srgb, var(--line) 35%, transparent) calc(25px * var(--content-scale))
   );
   background-position-y: 20px;
 }
@@ -1194,7 +1194,7 @@ textarea {
   min-height: 30px;
   padding: 4px 8px;
   border-radius: 4px;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
   color: var(--muted);
   transition:
     background-color 0.18s,
@@ -1237,7 +1237,7 @@ textarea {
   box-shadow:
     inset 0 1px 0 #ffffff2b,
     0 1px 2px var(--shadow);
-  font-size: 12.5px;
+  font-size: calc(12.5px * var(--font-scale));
   line-height: 1.5;
   transition:
     border-color 0.18s,
@@ -1258,7 +1258,7 @@ textarea {
   min-height: 33px;
   padding: 0 10px;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
   color: var(--ink);
   background: var(--panel);
   border-radius: 4px;
@@ -1356,7 +1356,7 @@ textarea {
   min-height: 33px;
   padding: 6px 9px;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   color: var(--ink);
   text-align: left;
   transition:
@@ -1457,7 +1457,7 @@ textarea {
   margin-top: 0;
   min-height: 330px;
   padding: 14px 16px;
-  font-size: 13px;
+  font-size: calc(13px * var(--content-scale));
   line-height: 1.9;
 }
 .parse-chips {
@@ -2167,6 +2167,7 @@ textarea {
   background: var(--panel);
   padding: 10px 0;
   font: 12px/1.7 var(--mono);
+  font-size: calc(12px * var(--content-scale));
   scrollbar-width: thin;
 }
 .diff-line {

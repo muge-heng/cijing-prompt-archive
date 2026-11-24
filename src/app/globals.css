@@ -30,6 +30,8 @@
   --sans: Arial, 'Archive Sans', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   --sidebar-width: 218px;
+  --font-scale: 1;
+  --content-scale: 1;
   --img-grain: url('/images/grain.svg');
   --img-wood: url('/images/wood.svg');
   --img-room-day: url('/images/archive-room.jpg');
@@ -61,6 +63,18 @@ html[data-theme='dark'] {
   --tag-text: #c6d0b5;
   --glyph-paper: #393f31;
 }
+html[data-font-size='small'] {
+  --font-scale: 0.9;
+  --content-scale: 0.9;
+}
+html[data-font-size='large'] {
+  --font-scale: 1.09;
+  --content-scale: 1.14;
+}
+html[data-font-size='xlarge'] {
+  --font-scale: 1.17;
+  --content-scale: 1.26;
+}
 * {
   box-sizing: border-box;
 }
@@ -74,7 +88,7 @@ body {
   color: var(--ink);
   background: var(--paper);
   font-family: var(--sans);
-  font-size: 14px;
+  font-size: calc(14px * var(--font-scale));
   line-height: 1.6;
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
@@ -153,7 +167,7 @@ button .icon {
   box-shadow:
     0 1px 2px var(--shadow),
     inset 0 1px 0 #ffffff32;
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   font-weight: 500;
   letter-spacing: 0.2px;
   white-space: nowrap;
@@ -176,7 +190,7 @@ button .icon {
 .button.small {
   min-height: 29px;
   padding: 3px 10px;
-  font-size: 11.5px;
+  font-size: calc(11.5px * var(--font-scale));
   gap: 5px;
 }
 .icon-button {
@@ -198,7 +212,7 @@ button .icon {
   align-items: center;
   gap: 6px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: calc(12px * var(--font-scale));
   padding: 4px 0;
 }
 .text-button:hover {

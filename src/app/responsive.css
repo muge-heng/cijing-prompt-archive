@@ -23,7 +23,7 @@
     padding-left: 35px;
   }
   .hero-copy > p {
-    font-size: 14px;
+    font-size: calc(14px * var(--font-scale));
   }
   .hero-date {
     font-size: 11.5px;
@@ -39,7 +39,7 @@
     margin-bottom: 16px;
   }
   .section-heading h2 {
-    font-size: 23px;
+    font-size: calc(23px * var(--font-scale));
   }
   .drawer-front {
     height: 154px;
@@ -64,7 +64,7 @@
     min-height: 70px;
   }
   .document-name strong {
-    font-size: 14px;
+    font-size: calc(14px * var(--font-scale));
   }
   .document-head {
     min-height: 34px;
@@ -101,7 +101,7 @@
     letter-spacing: 1px;
   }
   .nav-item {
-    font-size: 12px;
+    font-size: calc(12px * var(--font-scale));
   }
   .sidebar-bottom {
     padding: 22px 13px 0;
@@ -164,7 +164,7 @@
     width: 143px;
   }
   .section-heading h2 {
-    font-size: 20px;
+    font-size: calc(20px * var(--font-scale));
   }
   .brass-pull {
     width: 78px;
@@ -319,7 +319,7 @@
     display: none;
   }
   .breadcrumbs strong {
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--font-scale));
   }
   .global-search {
     width: 27px;
@@ -378,7 +378,7 @@
     letter-spacing: 1px;
   }
   .hero-copy > p {
-    font-size: 11.5px;
+    font-size: calc(11.5px * var(--font-scale));
     margin-top: 2px;
     letter-spacing: 0.5px;
   }
@@ -423,7 +423,7 @@
     bottom: 8px;
   }
   .section-heading h2 {
-    font-size: 20px;
+    font-size: calc(20px * var(--font-scale));
   }
   .section-titles {
     gap: 9px;
@@ -517,14 +517,14 @@
     width: 23px;
   }
   .document-name strong {
-    font-size: 12px;
+    font-size: calc(12px * var(--font-scale));
     letter-spacing: 0;
   }
   .document-name small {
-    font-size: 9px;
+    font-size: calc(9px * var(--font-scale));
   }
   .document-date {
-    font-size: 10px;
+    font-size: calc(10px * var(--font-scale));
   }
   .row-actions {
     gap: 0;
@@ -553,10 +553,10 @@
     font-size: 8px;
   }
   .collection-heading h1 {
-    font-size: 26px;
+    font-size: calc(26px * var(--font-scale));
   }
   .collection-heading p {
-    font-size: 11px;
+    font-size: calc(11px * var(--font-scale));
   }
   .collection-stamp {
     width: 53px;
@@ -577,11 +577,13 @@
     padding: 11px 12px 0;
   }
   .folder-sheet > strong {
-    font-size: 17px;
+    font-size: calc(17px * var(--font-scale));
   }
   .folder-sheet > p {
-    height: 38px;
-    font-size: 10px;
+    min-height: 38px;
+    height: auto;
+    padding-bottom: 6px;
+    font-size: calc(10px * var(--font-scale));
     line-height: 1.7;
   }
   .folder-card-top span {
@@ -599,7 +601,7 @@
     gap: 5px;
   }
   .list-search input {
-    font-size: 10.5px;
+    font-size: calc(10.5px * var(--font-scale));
   }
   .filter-selects {
     gap: 5px;
@@ -622,7 +624,7 @@
     grid-template-columns: repeat(2, 1fr);
   }
   .motion-segmented button {
-    font-size: 10.5px;
+    font-size: calc(10.5px * var(--font-scale));
     padding: 4px;
   }
   .library-filters {
@@ -661,7 +663,7 @@
     gap: 9px;
   }
   .search-input-wrap input {
-    font-size: 13px;
+    font-size: calc(13px * var(--font-scale));
   }
   .search-results {
     max-height: 60dvh;
@@ -685,10 +687,10 @@
     padding: 10px 16px 12px;
   }
   .editor-title-input {
-    font-size: 22px;
+    font-size: calc(22px * var(--font-scale));
   }
   .editor-synopsis-input {
-    font-size: 11px;
+    font-size: calc(11px * var(--font-scale));
   }
   .workbench-compose,
   .workbench-preview {
@@ -790,13 +792,13 @@
     gap: 6px;
   }
   .document-name strong {
-    font-size: 11.5px;
+    font-size: calc(11.5px * var(--font-scale));
   }
   .row-actions .icon-button {
     width: 19px;
   }
   .document-date {
-    font-size: 9px;
+    font-size: calc(9px * var(--font-scale));
   }
   .section-english {
     font-size: 6.5px;

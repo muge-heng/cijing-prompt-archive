@@ -6,11 +6,13 @@ import { Icon } from './icons';
 import { PaperGlyph } from './document-list';
 import type { ArchiveMutation } from './editor';
 export type MotionLevel = 'cinematic' | 'rich' | 'gentle' | 'off';
+export type FontSizeLevel = 'small' | 'standard' | 'large' | 'xlarge';
 export interface Preferences {
   theme: 'light' | 'dark';
   entrance: boolean;
   motion: boolean;
   motionLevel: MotionLevel;
+  fontSize?: FontSizeLevel;
   compactIndex?: boolean;
 }
 export type EntityForm = { kind: 'shelf' | 'folder'; id?: string; shelfId?: string };
@@ -192,6 +194,12 @@ const motionModes: { level: MotionLevel; label: string; hint: string }[] = [
   { level: 'gentle', label: '轻柔克制', hint: '短促淡入过渡，减弱视差与等待' },
   { level: 'off', label: '关闭动效', hint: '立即切换页面，无动态效果' },
 ];
+const fontSizeModes: { level: FontSizeLevel; label: string; hint: string }[] = [
+  { level: 'small', label: '小号', hint: '紧凑排布，一屏容纳更多条目' },
+  { level: 'standard', label: '标准', hint: '均衡舒展，兼顾阅读与排版密度（默认）' },
+  { level: 'large', label: '大号', hint: '舒适阅读，放大界面与编辑区字号' },
+  { level: 'xlarge', label: '超大', hint: '醒目护眼，显著放大正文与提示词内容' },
+];
 export function Settings({
   prefs,
   change,
@@ -205,6 +213,9 @@ export function Settings({
 }) {
   const motionLevel: MotionLevel = prefs.motionLevel || (prefs.motion ? 'rich' : 'off');
   const currentMotion = motionModes.find((m) => m.level === motionLevel) || motionModes[1];
+  const fontSizeLevel: FontSizeLevel = prefs.fontSize || 'standard';
+  const currentFontSize =
+    fontSizeModes.find((f) => f.level === fontSizeLevel) || fontSizeModes[1];
   return (
     <Dialog title="仓库设置" eyebrow="WORKSPACE PREFERENCES" onClose={onClose}>
       <div className="settings-body">
@@ -258,6 +269,28 @@ export function Settings({
                 onClick={() => change({ ...prefs, motionLevel: m.level, motion: m.level !== 'off' })}
               >
                 {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="setting-row setting-row-stack">
+          <div className="setting-row-head">
+            <div>
+              <strong>界面字号</strong>
+              <p>调节导航、列表与提示词编辑区的文字大小。当前：{currentFontSize.hint}</p>
+            </div>
+          </div>
+          <div className="motion-segmented" role="radiogroup" aria-label="界面字号">
+            {fontSizeModes.map((f) => (
+              <button
+                key={f.level}
+                type="button"
+                role="radio"
+                aria-checked={fontSizeLevel === f.level}
+                className={fontSizeLevel === f.level ? 'selected' : ''}
+                onClick={() => change({ ...prefs, fontSize: f.level })}
+              >
+                {f.label}
               </button>
             ))}
           </div>

@@ -16,6 +16,7 @@ import {
   SearchDialog,
   Settings,
   type EntityForm,
+  type FontSizeLevel,
   type MotionLevel,
   type Preferences,
 } from './archive-dialogs';
@@ -41,6 +42,7 @@ const defaults: Preferences = {
   entrance: true,
   motion: true,
   motionLevel: 'rich',
+  fontSize: 'standard',
   compactIndex: false,
 };
 function section(title: string, en: string, action?: ReactNode) {
@@ -180,17 +182,27 @@ export function ArchiveApp({
             : stored.motion === false
               ? 'off'
               : 'rich';
+        const rawFontSize = stored.fontSize;
+        const fontSize: FontSizeLevel =
+          rawFontSize === 'small' ||
+          rawFontSize === 'standard' ||
+          rawFontSize === 'large' ||
+          rawFontSize === 'xlarge'
+            ? rawFontSize
+            : 'standard';
         p = {
           theme: stored.theme === 'dark' ? 'dark' : 'light',
           entrance: stored.entrance !== false,
           motion: motionLevel !== 'off',
           motionLevel,
+          fontSize,
           compactIndex: stored.compactIndex === true,
         };
       } catch {}
       setPrefs(p);
       document.documentElement.dataset.theme = p.theme;
       document.documentElement.dataset.motion = p.motionLevel;
+      document.documentElement.dataset.fontSize = p.fontSize || 'standard';
       setEntering(p.entrance && p.motionLevel !== 'off');
       if (isStaticMode) {
         setData(readLocalArchive());
@@ -292,10 +304,18 @@ export function ArchiveApp({
   }, [mobileNav]);
   const changePrefs = (p: Preferences) => {
     const motionLevel: MotionLevel = p.motionLevel || (p.motion ? 'rich' : 'off');
-    const next: Preferences = { ...p, motionLevel, motion: motionLevel !== 'off' };
+    const fontSize: FontSizeLevel =
+      p.fontSize === 'small' ||
+      p.fontSize === 'standard' ||
+      p.fontSize === 'large' ||
+      p.fontSize === 'xlarge'
+        ? p.fontSize
+        : 'standard';
+    const next: Preferences = { ...p, motionLevel, motion: motionLevel !== 'off', fontSize };
     setPrefs(next);
     document.documentElement.dataset.theme = next.theme;
     document.documentElement.dataset.motion = next.motionLevel;
+    document.documentElement.dataset.fontSize = fontSize;
     try {
       localStorage.setItem('archive-preferences', JSON.stringify(next));
     } catch {
