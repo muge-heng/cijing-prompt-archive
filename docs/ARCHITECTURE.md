@@ -170,14 +170,14 @@ erDiagram
 | `createFolder` | `shelfId`（需存在）、`name`（1–30 字符）、`description`（选填，≤160 字符） | 在指定货架下新增文件夹 |
 | `updateFolder` | `id`、`name`（1–30）、`description`（选填，≤160） | 更新文件夹名称与说明 |
 | `deleteFolder` | `id` | 级联删除下属文档，并联动清理对应 `revisions` 与 `testCases` |
-| `saveDoc` | `folderId`（需存在）、`title`（1–100）、`synopsis`（选填，≤300）、`blocks`（1–40 个模块，支持内置 6 类或 `custom` 自定义模块 `label` 1–24 字符，ID 唯一且 ≤100，内容 ≤30000，至少 1 个非空模块） | 新建或更新文档（内容确有变更时自动将旧版本压入 `revisions[id]`，单篇保留最近 10 次） |
+| `saveDoc` | `folderId`（需存在）、`title`（1–100）、`synopsis`（选填，≤300）、`blocks`（1–40 个模块，支持内置 6 类或 `custom` 自定义模块 `label` 1–24 字符，ID 唯一且 ≤100，内容 ≤30000，可选 `messageRole?: 'system' \| 'user'`，至少 1 个非空模块） | 新建或更新文档（内容确有变更时自动将旧版本压入 `revisions[id]`，单篇保留最近 10 次） |
 | `restoreRevision` | `docId`、`revisionId` | 先将文档当前内容保存为新修订快照防误触，再将目标修订回滚写回文档 |
 | `saveTestCase` | `docId`、`id?`、`name`（1–24 字符）、`values`（字符串键值映射） | 新增或更新当前文档的变量调试样片（单篇上限 8 组） |
 | `deleteTestCase` | `docId`、`id` | 移除指定调试样片 |
 | `importArchive` | `mode`（`'merge'` \| `'replace'`）、`archive`（经 `normalizeArchivePayload` 校验） | `merge` 自动重映射冲突 ID、维护外键一致并按名称去重预设；`replace` 整仓覆盖 |
 | `resetArchive` | 无 | 重置仓库为 `initialArchive()` 初始示例并清空修订签与样片 |
-| `createPreset` | `name`（1–24 字符，不与内置模块/已有预设重名，上限 60 个）、`template`（选填，≤30000）、`color`（5 色枚举） | 新增可复用板块预设 |
-| `updatePreset` | `id`、`name`、`template`、`color` | 更新已有板块预设 |
+| `createPreset` | `name`（1–24 字符，不与内置模块/已有预设重名，上限 60 个）、`template`（选填，≤30000）、`color`（5 色枚举）、`messageRole`（`'system' \| 'user'`，默认 `'user'`） | 新增可复用板块预设 |
+| `updatePreset` | `id`、`name`、`template`、`color`、`messageRole` | 更新已有板块预设 |
 | `deletePreset` | `id` | 移除板块预设（不破坏已有文档的自定义模块快照） |
 | `open` | `id` | 更新 `lastOpened` 为当前 ISO 时间 |
 | `favorite` | `id`、`favorite`（布尔值） | 切换收藏标记 |
@@ -221,8 +221,8 @@ flowchart TD
 - **URL 双向路由（`src/lib/archive-navigation.ts`）**：支持 `?view=...&id=...` 查询参数，并向后兼容旧版 `#kind/id` Hash 书签。点击导航使用 `history.pushState` 更新地址并滚动至顶部，监听 `popstate` 与 `hashchange` 恢复状态；若 URL 指向已删除的货架/文件夹，`resolveView()` 自动回退至 `overview`。
 - **工作台编辑与草稿保护（`src/components/editor.tsx`）**：
   - 桌面端（`>=1024px`）采用居中宽幅案台布局，两排标签职责分明：顶栏视图切换为「仅编辑 / 双栏对照 / 仅调试」，左栏写作模式为「模块拼装 / 完整输入」；窄屏与移动端（`<1024px`）自动回退为全屏单栏标签页切换。
-  - 支持 6 种内置模块类型与自定义 `custom` 模块/可复用板块预设（`BlockPreset`），支持按住拖拽手柄 `.block-drag-handle`（`dragArmedId` 门控防止误选文字）上下插入重排模块及直接编辑摘要 `synopsis`。
-  - 提供「快捷变量」插入条，点击既有变量胶囊或 `+ 新变量` 可直接在当前聚焦文本框光标处插入占位符；「完整输入」模式通过 `parseFullTextPrompt` 忽略围栏代码块内的 `#` 注释并智能匹配或引导新建预设。
+  - 支持 6 种内置模块类型与自定义 `custom` 模块/可复用板块预设（`BlockPreset`），支持为预设与单个模块指定 `System` / `User` 消息归属（优先级 `block.messageRole -> preset.messageRole -> defaultBlockMessageRole`，卡片标题栏提供 `SYS` / `USR` 快捷切换），支持按住拖拽手柄 `.block-drag-handle`（`dragArmedId` 门控防止误选文字）上下插入重排模块及直接编辑摘要 `synopsis`。
+  - 提供「快捷变量」插入条，点击既有变量胶囊或 `+ 新变量` 可直接在当前聚焦文本框光标处插入占位符；「完整输入」模式通过 `parseFullTextPrompt` 忽略围栏代码块内的 `#` 与角色标记，除智能匹配 `## 标题` 外还支持识别 `[System]` / `[User]` / `## System` 作用域分段以及标题尾标 `[System]` / `[USR]`，并利用 `blocksToMarkdown` 在存在角色覆写时自动无损序列化为 `[System]` / `[User]` 分段。
   - 变量引擎通过 `parseVariables()` 支持 `{{变量名:默认值}}` / `{{变量名：默认值}}` 语法；`renderPromptSegments()` 在预览纸中区分展示已填变量（`.var-filled`）、默认值（`.var-default`）与待填占位（`.var-missing`），支持 `Markdown` / `纯文本` / `System / User` 三种格式组装与中英混合 Token 估算（`estimateTokens()`），并可保存最多 8 组调试样片。
   - 修订签弹窗（`RevisionHistoryDialog`）展示 `computeLineDiff` 行级变更对比并支持一键回滚恢复（同时更新 `savedDoc` 基准避免误报未保存）；馆藏卡片弹窗（`ArchiveCardDialog`）以纯 2D Canvas 绘制 2x 高清轻拟物索引卡片并导出/复制 PNG。
   - 通过对比 `savedDoc` 与编辑区状态计算 `dirty`，关闭未保存修改时触发「离开这份草稿？」二次确认弹窗。
