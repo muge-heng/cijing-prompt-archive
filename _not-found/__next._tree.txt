@@ -1,4 +1,4 @@
-:HL["/cijing-prompt-archive/_next/static/chunks/1bzv1pena46ad.css","style"]
+:HL["/cijing-prompt-archive/_next/static/chunks/11dgam6uz46i4.css","style"]
 2:[["children",{"s":"__PAGE__","h":160}]]
 1:[["children",{"s":"/_not-found","h":96,"c":"$Q2"}]]
-0:{"b":"HRuJvqIoPJi6bZLortorQ","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
+0:{"b":"IavjQYcox17hZlrktm0ii","t":{"t":{"s":"","h":80,"c":"$Q1"}}}
