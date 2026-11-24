@@ -265,14 +265,6 @@
     background: #22291d60;
     backdrop-filter: blur(2px);
   }
-  .brand {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .mobile-close {
-    display: inline-flex;
-  }
   .breadcrumbs {
     gap: 10px;
   }

@@ -535,13 +535,6 @@ export function ArchiveApp({
               <small>PROMPT ARCHIVE</small>
             </span>
           </button>
-          <button
-            className="mobile-close icon-button"
-            onClick={() => setMobileNav(false)}
-            aria-label="关闭导航"
-          >
-            <Icon name="close" size={17} />
-          </button>
         </div>
         <div className="sidebar-nav">
           <div className="nav-label">
@@ -789,7 +782,7 @@ export function ArchiveApp({
               aria-label="打开导航"
               aria-expanded={mobileNav}
               aria-controls="archive-navigation"
-              onClick={() => setMobileNav(true)}
+              onClick={() => setMobileNav((v) => !v)}
             >
               <Icon name="menu" size={20} />
             </button>

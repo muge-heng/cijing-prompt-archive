@@ -864,6 +864,20 @@ textarea {
   background: var(--inset);
   border-color: var(--brass);
 }
+.add-block-button > .icon:last-child {
+  transition:
+    transform 0.22s cubic-bezier(0.2, 0.75, 0.25, 1),
+    color 0.2s;
+}
+.add-block-button[aria-expanded='true'] {
+  background: var(--inset);
+  border-color: var(--brass);
+  color: var(--ink);
+}
+.add-block-button[aria-expanded='true'] > .icon:last-child {
+  transform: rotate(180deg);
+  color: var(--brass);
+}
 .module-palette-panel {
   margin-top: 8px;
   padding: 12px;
