@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import type { BlockPreset, ShelfColor } from '@/lib/archive-types';
+import type { BlockPreset, MessageRole, ShelfColor } from '@/lib/archive-types';
 import type { HeadingResolution, UnmatchedHeading } from '@/lib/archive-markdown';
 import { Dialog } from './dialog';
 import { Icon } from './icons';
@@ -19,6 +19,7 @@ export function PresetDialog({
   initialName = '',
   initialTemplate = '',
   initialColor = 'ochre',
+  initialMessageRole = 'user',
   allowInsert = false,
   mutate,
   onClose,
@@ -29,6 +30,7 @@ export function PresetDialog({
   initialName?: string;
   initialTemplate?: string;
   initialColor?: ShelfColor;
+  initialMessageRole?: MessageRole;
   allowInsert?: boolean;
   mutate: ArchiveMutation;
   onClose: () => void;
@@ -38,6 +40,7 @@ export function PresetDialog({
   const [name, setName] = useState(preset?.name || initialName);
   const [template, setTemplate] = useState(preset?.template ?? initialTemplate);
   const [color, setColor] = useState<ShelfColor>(preset?.color || initialColor);
+  const [messageRole, setMessageRole] = useState<MessageRole>(preset?.messageRole || initialMessageRole);
   const [insertIntoDoc, setInsertIntoDoc] = useState(Boolean(allowInsert && !preset));
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -60,6 +63,7 @@ export function PresetDialog({
         name: trimmedName,
         template: trimmedTemplate,
         color,
+        messageRole,
       });
       const resolvedId = id || preset?.id || '';
       onSaved(
@@ -68,6 +72,7 @@ export function PresetDialog({
           name: trimmedName,
           template: trimmedTemplate,
           color,
+          messageRole,
           createdAt: preset?.createdAt || new Date().toISOString(),
         },
         insertIntoDoc,
@@ -134,6 +139,29 @@ export function PresetDialog({
                 </button>
               ))}
               <span>{tones.find((t) => t[0] === color)?.[1]}</span>
+            </div>
+          </div>
+          <div className="field-label">
+            默认消息归属 <em>用于 System / User 格式预览与解析</em>
+            <div className="role-segmented" role="radiogroup" aria-label="默认消息归属">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={messageRole === 'system'}
+                className={messageRole === 'system' ? 'selected' : ''}
+                onClick={() => setMessageRole('system')}
+              >
+                System 系统指令
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={messageRole === 'user'}
+                className={messageRole === 'user' ? 'selected' : ''}
+                onClick={() => setMessageRole('user')}
+              >
+                User 用户输入
+              </button>
             </div>
           </div>
           <label className="field-label">
@@ -239,6 +267,9 @@ export function PresetManagerDialog({
                   <div className="preset-manager-title">
                     <span className={`select-tone-dot tone-${p.color}`} aria-hidden="true" />
                     <strong>{p.name}</strong>
+                    <span className={`preset-role-tag role-${p.messageRole === 'system' ? 'system' : 'user'}`}>
+                      {p.messageRole === 'system' ? 'SYS' : 'USR'}
+                    </span>
                   </div>
                   <p>{p.template.trim() || '（空白模板 · 插入后手动填写）'}</p>
                 </div>
@@ -323,6 +354,7 @@ export function UnmatchedBlocksDialog({
       name: u.heading.slice(0, 24) || '自定义模块',
       color: u.suggestedColor,
       template: u.text,
+      messageRole: u.suggestedRole,
     })),
   );
 
@@ -386,6 +418,29 @@ export function UnmatchedBlocksDialog({
                         onChange={(e) => patchItem(item.index, { name: e.target.value })}
                       />
                     </label>
+                    <div className="unmatched-tones">
+                      <span>归属</span>
+                      <div className="unmatched-mode-group" role="radiogroup" aria-label={`${item.name}消息归属`}>
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={item.messageRole === 'system'}
+                          className={item.messageRole === 'system' ? 'selected' : ''}
+                          onClick={() => patchItem(item.index, { messageRole: 'system' })}
+                        >
+                          System
+                        </button>
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={item.messageRole === 'user'}
+                          className={item.messageRole === 'user' ? 'selected' : ''}
+                          onClick={() => patchItem(item.index, { messageRole: 'user' })}
+                        >
+                          User
+                        </button>
+                      </div>
+                    </div>
                     <div className="unmatched-tones">
                       <span>色调</span>
                       <div className="unmatched-tone-dots">

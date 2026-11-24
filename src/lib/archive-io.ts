@@ -1,12 +1,14 @@
 import { blocksToMarkdown, normalizeHeading } from './archive-markdown';
 import {
   isBuiltinBlockKind,
+  isValidMessageRole,
   uid,
   type ArchiveData,
   type BlockPreset,
   type DebugTestCase,
   type DocRevision,
   type Folder,
+  type MessageRole,
   type PromptBlock,
   type PromptDoc,
   type Shelf,
@@ -40,8 +42,16 @@ function sanitizeBlocksList(rawBlocks: unknown): PromptBlock[] {
     seenIds.add(id);
 
     const body = typeof cand.text === 'string' ? cand.text.slice(0, 30000) : '';
+    const messageRole: MessageRole | undefined = isValidMessageRole(cand.messageRole)
+      ? cand.messageRole
+      : undefined;
     if (isBuiltinBlockKind(cand.kind)) {
-      out.push({ id, kind: cand.kind, text: body });
+      out.push({
+        id,
+        kind: cand.kind,
+        text: body,
+        ...(messageRole ? { messageRole } : {}),
+      });
     } else if (cand.kind === 'custom') {
       const presetId = cleanStr(cand.presetId, 100);
       out.push({
@@ -51,6 +61,7 @@ function sanitizeBlocksList(rawBlocks: unknown): PromptBlock[] {
         text: body,
         ...(presetId ? { presetId } : {}),
         color: cleanColor(cand.color, 'ochre'),
+        ...(messageRole ? { messageRole } : {}),
       });
     }
   }
@@ -271,6 +282,7 @@ export function normalizeArchivePayload(value: unknown): ArchiveData {
         name,
         template: typeof cand.template === 'string' ? cand.template.trim().slice(0, 30000) : '',
         color: cleanColor(cand.color, 'ochre'),
+        messageRole: isValidMessageRole(cand.messageRole) ? cand.messageRole : 'user',
         createdAt: cleanStr(cand.createdAt, 40) || new Date().toISOString(),
       });
     }

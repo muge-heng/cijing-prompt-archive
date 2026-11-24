@@ -6,16 +6,19 @@ import {
   blockLabels,
   blockTemplates,
   blockTitle,
+  defaultBlockMessageRole,
   estimateTokens,
   parseVariables,
   renderPrompt,
   renderPromptSegments,
+  resolveBlockMessageRole,
   uid,
   type ArchiveData,
   type BlockPreset,
   type BuiltinBlockKind,
   type CopyFormat,
   type DocRevision,
+  type MessageRole,
   type PromptBlock,
   type PromptDoc,
   type ShelfColor,
@@ -114,6 +117,7 @@ export function DocumentEditor({
     initialName?: string;
     initialTemplate?: string;
     initialColor?: ShelfColor;
+    initialMessageRole?: MessageRole;
     allowInsert?: boolean;
     bindBlockId?: string;
   } | null>(null);
@@ -247,12 +251,14 @@ export function DocumentEditor({
           name,
           template,
           color: r.color,
+          messageRole: r.messageRole,
         });
         createdPresetsByIndex[r.index] = {
           id: id || uid(),
           name,
           template,
           color: r.color,
+          messageRole: r.messageRole,
           createdAt: new Date().toISOString(),
         };
       }
@@ -261,6 +267,7 @@ export function DocumentEditor({
         resolutions,
         createdPresetsByIndex,
         blocks,
+        presets,
       );
       const shouldSave = unmatchedModal.saveAfter;
       setBlocks(finalBlocks);
@@ -479,6 +486,23 @@ export function DocumentEditor({
   const update = (id: string, text: string) => {
     setBlocks((bs) => bs.map((b) => (b.id === id ? { ...b, text } : b)));
     setTested(false);
+  };
+  const toggleBlockRole = (block: PromptBlock) => {
+    const currentRole = resolveBlockMessageRole(block, presets);
+    const nextRole: MessageRole = currentRole === 'system' ? 'user' : 'system';
+    const preset = block.presetId ? presets.find((p) => p.id === block.presetId) : undefined;
+    const natural: MessageRole = preset?.messageRole || defaultBlockMessageRole(block.kind);
+    setBlocks((bs) =>
+      bs.map((b) => {
+        if (b.id !== block.id) return b;
+        if (nextRole === natural) {
+          const rest = { ...b };
+          delete rest.messageRole;
+          return rest;
+        }
+        return { ...b, messageRole: nextRole };
+      }),
+    );
   };
   const move = (i: number, delta: number) =>
     setBlocks((bs) => {
@@ -784,6 +808,20 @@ export function DocumentEditor({
                               <span className="block-number">{String(i + 1).padStart(2, '0')}</span>
                               <strong>{label}</strong>
                               {isCustom && <span className="custom-block-tag">自定义</span>}
+                              {(() => {
+                                const effectiveRole = resolveBlockMessageRole(block, presets);
+                                return (
+                                  <button
+                                    type="button"
+                                    className={`block-role-pill role-${effectiveRole}`}
+                                    title={`当前归属 ${effectiveRole === 'system' ? 'System 系统指令' : 'User 用户输入'} · 点击切换`}
+                                    aria-label={`切换${label}消息归属，当前为${effectiveRole === 'system' ? 'System' : 'User'}`}
+                                    onClick={() => toggleBlockRole(block)}
+                                  >
+                                    {effectiveRole === 'system' ? 'SYS' : 'USR'}
+                                  </button>
+                                );
+                              })()}
                               <div className="block-controls">
                                 {canPromoteToPreset && (
                                   <button
@@ -795,6 +833,7 @@ export function DocumentEditor({
                                         initialName: label,
                                         initialTemplate: block.text,
                                         initialColor: block.color || 'ochre',
+                                        initialMessageRole: resolveBlockMessageRole(block, presets),
                                         allowInsert: false,
                                         bindBlockId: block.id,
                                       })
@@ -917,6 +956,9 @@ export function DocumentEditor({
                                 >
                                   <span className={`select-tone-dot tone-${preset.color}`} aria-hidden="true" />
                                   <span>{preset.name}</span>
+                                  {preset.messageRole === 'system' && (
+                                    <span className="preset-role-tag role-system">SYS</span>
+                                  )}
                                 </button>
                               ))}
                             </div>
@@ -940,7 +982,7 @@ export function DocumentEditor({
                       <h3>
                         Markdown 完整输入 <span>{parsedFullText?.previewBlocks.length || 0} 段</span>
                       </h3>
-                      <span className="subtle">使用 ## 标题 自动识别并匹配模块</span>
+                      <span className="subtle">支持 ## 标题 与 [System] / [User] 分段</span>
                     </div>
                     <textarea
                       ref={fulltextTextareaRef}
@@ -949,7 +991,7 @@ export function DocumentEditor({
                       rows={16}
                       value={fullText}
                       placeholder={
-                        '可直接粘贴或一次编写完整提示词，例如：\n\n## 角色设定\n你是一位资深产品文案编辑。\n\n## 任务描述\n围绕「{{主题:新品发布}}」撰写一段产品介绍。\n\n## 示例参考\n（未匹配到的标题将在同步或保存时提示快速新建为模块或预设）'
+                        '可直接粘贴或一次编写完整提示词，支持 [System] / [User] 标记归属，例如：\n\n[System]\n## 角色设定\n你是一位资深产品文案编辑。\n\n[User]\n## 任务描述\n围绕「{{主题:新品发布}}」撰写一段产品介绍。\n\n## 示例参考\n（未匹配到的标题将在同步或保存时提示快速新建为模块或预设）'
                       }
                       onFocus={() => {
                         lastFocusTarget.current = 'fulltext';
@@ -960,22 +1002,49 @@ export function DocumentEditor({
                         setTested(false);
                       }}
                     />
-                    {parsedFullText && (parsedFullText.matchedLabels.length > 0 || parsedFullText.unmatched.length > 0) && (
-                      <div className="parse-chips" aria-label="标题解析预览">
-                        {parsedFullText.matchedLabels.map((label) => (
-                          <span className="parse-chip matched" key={`m-${label}`}>
-                            <Icon name="check" size={11} />
-                            {label}
-                          </span>
-                        ))}
-                        {parsedFullText.unmatched.map((item) => (
-                          <span className="parse-chip unmatched" key={`u-${item.index}`}>
-                            <Icon name="plus" size={11} />
-                            {item.heading} · 待新建
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    {parsedFullText &&
+                      (parsedFullText.matchedLabels.length > 0 ||
+                        parsedFullText.unmatched.length > 0 ||
+                        parsedFullText.hasRoleMarkers) && (
+                        <div className="parse-chips" aria-label="标题解析预览">
+                          {(() => {
+                            const matchedItems: { key: string; label: string; role: MessageRole }[] = [];
+                            const seenMatched = new Set<string>();
+                            for (const sec of parsedFullText.sections) {
+                              if (sec.matchedBy === 'unmatched') continue;
+                              if (sec.matchedBy === 'preamble' && !sec.messageRole) continue;
+                              const role =
+                                sec.messageRole ||
+                                (sec.presetId
+                                  ? presets.find((p) => p.id === sec.presetId)?.messageRole
+                                  : undefined) ||
+                                defaultBlockMessageRole(sec.kind);
+                              const key = `${sec.heading}|${role}`;
+                              if (seenMatched.has(key)) continue;
+                              seenMatched.add(key);
+                              matchedItems.push({ key, label: sec.heading, role });
+                            }
+                            return matchedItems.map((item) => (
+                              <span className="parse-chip matched" key={`m-${item.key}`}>
+                                <Icon name="check" size={11} />
+                                {item.label}
+                                <em className={`parse-chip-role role-${item.role}`}>
+                                  {item.role === 'system' ? 'SYS' : 'USR'}
+                                </em>
+                              </span>
+                            ));
+                          })()}
+                          {parsedFullText.unmatched.map((item) => (
+                            <span className="parse-chip unmatched" key={`u-${item.index}`}>
+                              <Icon name="plus" size={11} />
+                              {item.heading} · 待新建
+                              <em className={`parse-chip-role role-${item.suggestedRole}`}>
+                                {item.suggestedRole === 'system' ? 'SYS' : 'USR'}
+                              </em>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     {parsedFullText && parsedFullText.unmatched.length > 0 ? (
                       <div className="unmatched-callout" role="status">
                         <div>
@@ -1305,7 +1374,19 @@ export function DocumentEditor({
           }
           onDelete={async (preset) => {
             await mutate({ action: 'deletePreset', id: preset.id });
-            setBlocks((bs) => bs.map((b) => (b.presetId === preset.id ? { ...b, presetId: undefined } : b)));
+            setBlocks((bs) =>
+              bs.map((b) =>
+                b.presetId === preset.id
+                  ? {
+                      ...b,
+                      presetId: undefined,
+                      ...(b.messageRole || preset.messageRole === 'system'
+                        ? { messageRole: b.messageRole || preset.messageRole }
+                        : {}),
+                    }
+                  : b,
+              ),
+            );
             notify(`已移除预设「${preset.name}」`);
           }}
         />
@@ -1317,6 +1398,7 @@ export function DocumentEditor({
           initialName={presetForm.initialName}
           initialTemplate={presetForm.initialTemplate}
           initialColor={presetForm.initialColor}
+          initialMessageRole={presetForm.initialMessageRole}
           allowInsert={presetForm.allowInsert}
           mutate={mutate}
           onClose={() => setPresetForm(null)}
@@ -1335,7 +1417,11 @@ export function DocumentEditor({
               setBlocks((bs) =>
                 bs.map((b) =>
                   b.id === bindBlockId
-                    ? { ...b, presetId: saved.id, label: saved.name, color: saved.color }
+                    ? (() => {
+                        const next = { ...b, presetId: saved.id, label: saved.name, color: saved.color };
+                        delete next.messageRole;
+                        return next;
+                      })()
                     : b,
                 ),
               );
@@ -1350,8 +1436,21 @@ export function DocumentEditor({
             }
           }}
           onDeleted={(deletedId) => {
+            const deletedPreset = presets.find((p) => p.id === deletedId);
             setPresetForm(null);
-            setBlocks((bs) => bs.map((b) => (b.presetId === deletedId ? { ...b, presetId: undefined } : b)));
+            setBlocks((bs) =>
+              bs.map((b) =>
+                b.presetId === deletedId
+                  ? {
+                      ...b,
+                      presetId: undefined,
+                      ...(b.messageRole || deletedPreset?.messageRole === 'system'
+                        ? { messageRole: b.messageRole || deletedPreset?.messageRole }
+                        : {}),
+                    }
+                  : b,
+              ),
+            );
             notify('板块预设已删除');
           }}
         />

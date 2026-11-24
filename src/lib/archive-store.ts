@@ -15,9 +15,11 @@ import {
 } from './archive-io';
 import {
   isBuiltinBlockKind,
+  isValidMessageRole,
   uid,
   type ArchiveData,
   type BlockPreset,
+  type MessageRole,
   type PromptBlock,
   type ShelfColor,
 } from './archive-types';
@@ -148,17 +150,24 @@ function color(value: unknown): ShelfColor {
     throw new InputError('请选择有效的货架颜色。');
   return value as ShelfColor;
 }
+function optionalRole(value: unknown): MessageRole | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (!isValidMessageRole(value)) throw new InputError('消息角色仅支持 system 或 user。');
+  return value;
+}
 function blocks(value: unknown): PromptBlock[] {
   if (!Array.isArray(value) || value.length < 1 || value.length > 40)
     throw new InputError('每篇文档应包含 1 至 40 个模块。');
   const out = value.map((item) => {
     if (typeof item !== 'object' || !item) throw new InputError('模块类型无效。');
     const candidate = item as Record<string, unknown>;
+    const role = optionalRole(candidate.messageRole);
     if (isBuiltinBlockKind(candidate.kind)) {
       return {
         id: text(candidate.id, '模块编号', 100),
         kind: candidate.kind,
         text: text(candidate.text, '模块内容', 30000, true),
+        ...(role ? { messageRole: role } : {}),
       } as PromptBlock;
     }
     if (candidate.kind === 'custom') {
@@ -175,6 +184,7 @@ function blocks(value: unknown): PromptBlock[] {
         text: text(candidate.text, '模块内容', 30000, true),
         ...(presetId ? { presetId } : {}),
         color: blockColor,
+        ...(role ? { messageRole: role } : {}),
       } as PromptBlock;
     }
     throw new InputError('模块类型无效。');
@@ -377,6 +387,7 @@ export async function mutateArchive(value: unknown): Promise<string | null> {
     if (isBuiltinLabelCollision(name)) throw new InputError('该名称与内置模块名称重复，请换一个名称。');
     const template = text(b.template, '默认模板内容', 30000, true);
     const tone = color(b.color);
+    const messageRole = optionalRole(b.messageRole) || 'user';
     const id = uid();
     await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(71120318)`);
@@ -386,7 +397,10 @@ export async function mutateArchive(value: unknown): Promise<string | null> {
       const norm = normalizeHeading(name).toLowerCase();
       if (presets.some((p) => normalizeHeading(p.name).toLowerCase() === norm))
         throw new InputError('已存在同名板块预设。');
-      const next = [...presets, { id, name, template, color: tone, createdAt: new Date().toISOString() }];
+      const next = [
+        ...presets,
+        { id, name, template, color: tone, messageRole, createdAt: new Date().toISOString() },
+      ];
       await tx
         .insert(archiveMeta)
         .values({ key: PRESETS_META_KEY, value: JSON.stringify(next) })
@@ -404,6 +418,7 @@ export async function mutateArchive(value: unknown): Promise<string | null> {
       if (isBuiltinLabelCollision(name)) throw new InputError('该名称与内置模块名称重复，请换一个名称。');
       const template = text(b.template, '默认模板内容', 30000, true);
       const tone = color(b.color);
+      const incomingRole = optionalRole(b.messageRole);
       await db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(71120318)`);
         const rows = await tx.select().from(archiveMeta).where(eq(archiveMeta.key, PRESETS_META_KEY)).limit(1);
@@ -413,7 +428,11 @@ export async function mutateArchive(value: unknown): Promise<string | null> {
         const norm = normalizeHeading(name).toLowerCase();
         if (presets.some((p) => p.id !== id && normalizeHeading(p.name).toLowerCase() === norm))
           throw new InputError('已存在同名板块预设。');
-        const next = presets.map((p) => (p.id === id ? { ...p, name, template, color: tone } : p));
+        const next = presets.map((p) =>
+          p.id === id
+            ? { ...p, name, template, color: tone, messageRole: incomingRole ?? p.messageRole ?? 'user' }
+            : p,
+        );
         await tx
           .insert(archiveMeta)
           .values({ key: PRESETS_META_KEY, value: JSON.stringify(next) })

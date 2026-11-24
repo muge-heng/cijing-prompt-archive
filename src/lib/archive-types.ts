@@ -2,6 +2,7 @@ export type ShelfColor = 'moss' | 'walnut' | 'slate' | 'wine' | 'ochre';
 export type BuiltinBlockKind = 'role' | 'task' | 'context' | 'rules' | 'format' | 'text';
 export type BlockKind = BuiltinBlockKind | 'custom';
 export type CopyFormat = 'markdown' | 'plain' | 'messages';
+export type MessageRole = 'system' | 'user';
 
 export interface VariableSpec {
   name: string;
@@ -36,6 +37,7 @@ export interface PromptBlock {
   presetId?: string;
   label?: string;
   color?: ShelfColor;
+  messageRole?: MessageRole;
 }
 
 export interface BlockPreset {
@@ -43,6 +45,7 @@ export interface BlockPreset {
   name: string;
   template: string;
   color: ShelfColor;
+  messageRole?: MessageRole;
   createdAt: string;
 }
 
@@ -98,6 +101,29 @@ export const blockTemplates: Record<BuiltinBlockKind, string> = {
 export function isBuiltinBlockKind(kind: unknown): kind is BuiltinBlockKind {
   return typeof kind === 'string' && Object.hasOwn(blockLabels, kind);
 }
+export function isValidMessageRole(value: unknown): value is MessageRole {
+  return value === 'system' || value === 'user';
+}
+export function defaultBlockMessageRole(kind: BlockKind): MessageRole {
+  return kind === 'role' || kind === 'context' || kind === 'rules' || kind === 'format'
+    ? 'system'
+    : 'user';
+}
+export function resolveBlockMessageRole(
+  block: Pick<PromptBlock, 'kind' | 'presetId' | 'messageRole'>,
+  presets?: BlockPreset[],
+): MessageRole {
+  if (isValidMessageRole(block.messageRole)) {
+    return block.messageRole;
+  }
+  if (block.presetId && presets?.length) {
+    const preset = presets.find((p) => p.id === block.presetId);
+    if (preset && isValidMessageRole(preset.messageRole)) {
+      return preset.messageRole;
+    }
+  }
+  return defaultBlockMessageRole(block.kind);
+}
 export function blockTitle(block: PromptBlock, presets?: BlockPreset[]): string {
   if (isBuiltinBlockKind(block.kind)) {
     return blockLabels[block.kind];
@@ -121,9 +147,8 @@ export function assembleFormatted(blocks: PromptBlock[], presets: BlockPreset[] 
     return nonEmpty.map((b) => b.text).join('\n\n');
   }
   if (format === 'messages') {
-    const systemKinds = new Set<BlockKind>(['role', 'context', 'rules', 'format']);
-    const sysBlocks = nonEmpty.filter((b) => systemKinds.has(b.kind));
-    const userBlocks = nonEmpty.filter((b) => !systemKinds.has(b.kind));
+    const sysBlocks = nonEmpty.filter((b) => resolveBlockMessageRole(b, presets) === 'system');
+    const userBlocks = nonEmpty.filter((b) => resolveBlockMessageRole(b, presets) === 'user');
     const parts: string[] = [];
     if (sysBlocks.length) {
       parts.push(`[System]\n${assemble(sysBlocks, presets)}`);

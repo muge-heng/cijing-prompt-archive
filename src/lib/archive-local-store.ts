@@ -12,10 +12,12 @@ import {
 } from './archive-io';
 import {
   isBuiltinBlockKind,
+  isValidMessageRole,
   uid,
   type ArchiveData,
   type DebugTestCase,
   type DocRevision,
+  type MessageRole,
   type PromptBlock,
   type ShelfColor,
 } from './archive-types';
@@ -152,6 +154,14 @@ function color(value: unknown): ShelfColor {
   return value as ShelfColor;
 }
 
+function optionalRole(value: unknown): MessageRole | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (!isValidMessageRole(value)) {
+    throw new LocalInputError('消息角色仅支持 system 或 user。');
+  }
+  return value;
+}
+
 function blocks(value: unknown): PromptBlock[] {
   if (!Array.isArray(value) || value.length < 1 || value.length > 40) {
     throw new LocalInputError('每篇文档应包含 1 至 40 个模块。');
@@ -161,11 +171,13 @@ function blocks(value: unknown): PromptBlock[] {
       throw new LocalInputError('模块类型无效。');
     }
     const candidate = item as Record<string, unknown>;
+    const role = optionalRole(candidate.messageRole);
     if (isBuiltinBlockKind(candidate.kind)) {
       return {
         id: text(candidate.id, '模块编号', 100),
         kind: candidate.kind,
         text: text(candidate.text, '模块内容', 30000, true),
+        ...(role ? { messageRole: role } : {}),
       } as PromptBlock;
     }
     if (candidate.kind === 'custom') {
@@ -182,6 +194,7 @@ function blocks(value: unknown): PromptBlock[] {
         text: text(candidate.text, '模块内容', 30000, true),
         ...(presetId ? { presetId } : {}),
         color: blockColor,
+        ...(role ? { messageRole: role } : {}),
       } as PromptBlock;
     }
     throw new LocalInputError('模块类型无效。');
@@ -303,6 +316,7 @@ export function mutateLocalArchive(value: unknown): { id: string | null; archive
       name,
       template: text(b.template, '默认模板内容', 30000, true),
       color: color(b.color),
+      messageRole: optionalRole(b.messageRole) || 'user',
       createdAt: new Date().toISOString(),
     });
     return { id, archive: persistArchive(data) };
@@ -405,6 +419,7 @@ export function mutateLocalArchive(value: unknown): { id: string | null; archive
       preset.name = name;
       preset.template = text(b.template, '默认模板内容', 30000, true);
       preset.color = color(b.color);
+      preset.messageRole = optionalRole(b.messageRole) ?? preset.messageRole ?? 'user';
       return { id, archive: persistArchive(data) };
     }
     case 'deletePreset': {

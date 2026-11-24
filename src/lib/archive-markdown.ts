@@ -1,11 +1,15 @@
 import {
   blockLabels,
   blockTitle,
+  defaultBlockMessageRole,
   isBuiltinBlockKind,
+  isValidMessageRole,
+  resolveBlockMessageRole,
   uid,
   type BlockKind,
   type BlockPreset,
   type BuiltinBlockKind,
+  type MessageRole,
   type PromptBlock,
   type ShelfColor,
 } from './archive-types';
@@ -40,17 +44,96 @@ export function isBuiltinAlias(name: string): BuiltinBlockKind | null {
   return null;
 }
 
+export function parseMessageRoleMarker(line: string): MessageRole | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  const bracketMatch = trimmed.match(/^[\[\【]\s*([^\]\】]+?)\s*[\]\】]\s*[:：]?$/);
+  const headingMatch = trimmed.match(/^#{1,6}\s+(.+?)\s*#*$/);
+  let inner = bracketMatch?.[1] || headingMatch?.[1] || '';
+  if (!inner) return null;
+  inner = inner
+    .trim()
+    .replace(/^[\[\【]\s*|\s*[\]\】]$/g, '')
+    .replace(/[:：]+$/, '')
+    .trim()
+    .toLowerCase();
+  if (inner === 'system' || inner === 'system prompt' || inner === '系统' || inner === '系统提示词') {
+    return 'system';
+  }
+  if (inner === 'user' || inner === 'user prompt' || inner === '用户' || inner === '用户提示词') {
+    return 'user';
+  }
+  return null;
+}
+
+function extractHeadingAndRole(rawHeading: string): { heading: string; explicitRole?: MessageRole } {
+  const m = rawHeading.match(/^(.*?)\s*[\[\【]\s*(system|sys|user|usr)\s*[\]\】]\s*$/i);
+  if (!m) return { heading: rawHeading.trim() };
+  const cleanHeading = m[1].trim();
+  if (!cleanHeading) return { heading: rawHeading.trim() };
+  const tag = m[2].toLowerCase();
+  return {
+    heading: cleanHeading,
+    explicitRole: tag === 'system' || tag === 'sys' ? 'system' : 'user',
+  };
+}
+
+export function suggestMessageRole(heading: string): MessageRole {
+  const norm = normalizeHeading(heading).toLowerCase();
+  if (!norm) return 'user';
+  if (
+    /(规范|约束|规则|准则|标准|角色|设定|身份|风格|原则|限制|禁止|要求|格式|输出|思维链|评审|system|guideline|policy|rubric|rule|constraint|persona|role|format|cot)/.test(
+      norm,
+    )
+  ) {
+    return 'system';
+  }
+  return 'user';
+}
+
+function naturalBlockRole(
+  kind: BlockKind,
+  presetId: string | undefined,
+  presets: BlockPreset[],
+): MessageRole {
+  if (presetId) {
+    const preset = presets.find((p) => p.id === presetId);
+    if (preset && isValidMessageRole(preset.messageRole)) return preset.messageRole;
+  }
+  return defaultBlockMessageRole(kind);
+}
+
 export function blocksToMarkdown(blocks: PromptBlock[], presets: BlockPreset[] = []): string {
-  const parts = blocks
-    .filter((b, idx) => b.text.trim() || blocks.length === 1 || idx === 0)
-    .map((b) => {
-      const body = b.text.replace(/\s+$/, '');
-      if (b.kind === 'text') return body;
-      const heading = `## ${blockTitle(b, presets)}`;
-      return body ? `${heading}\n${body}` : heading;
-    })
-    .filter((part, idx, arr) => part.length > 0 || arr.length === 1);
-  return parts.join('\n\n');
+  const selected = blocks.filter((b, idx) => b.text.trim() || blocks.length === 1 || idx === 0);
+  const needsRoleMarkers = selected.some((b) => {
+    if (!b.text.trim() && b.kind === 'text') return false;
+    return resolveBlockMessageRole(b, presets) !== naturalBlockRole(b.kind, b.presetId, presets);
+  });
+
+  const parts: string[] = [];
+  let currentRole: MessageRole | null = null;
+  for (const b of selected) {
+    const body = b.text.replace(/\s+$/, '');
+    const piece =
+      b.kind === 'text'
+        ? body
+        : body
+          ? `## ${blockTitle(b, presets)}\n${body}`
+          : `## ${blockTitle(b, presets)}`;
+    if (!piece && selected.length > 1) continue;
+
+    if (needsRoleMarkers && (piece || selected.length > 1)) {
+      const role = resolveBlockMessageRole(b, presets);
+      if (role !== currentRole) {
+        parts.push(role === 'system' ? '[System]' : '[User]');
+        currentRole = role;
+      }
+    }
+    if (piece || parts.length === 0) {
+      parts.push(piece);
+    }
+  }
+  return parts.filter((part, idx, arr) => part.length > 0 || arr.length === 1).join('\n\n');
 }
 
 export interface UnmatchedHeading {
@@ -58,6 +141,7 @@ export interface UnmatchedHeading {
   heading: string;
   text: string;
   suggestedColor: ShelfColor;
+  suggestedRole: MessageRole;
 }
 
 export interface ParsedSection {
@@ -69,6 +153,7 @@ export interface ParsedSection {
   presetId?: string;
   label?: string;
   color?: ShelfColor;
+  messageRole?: MessageRole;
   matchedBy: 'preset' | 'builtin' | 'existing-custom' | 'unmatched' | 'preamble';
 }
 
@@ -79,6 +164,7 @@ export interface FullTextParseResult {
   unmatched: UnmatchedHeading[];
   matchedLabels: string[];
   overflowMerged: boolean;
+  hasRoleMarkers: boolean;
 }
 
 function matchExistingId(
@@ -100,10 +186,11 @@ function matchExistingId(
   return uid();
 }
 
-function sectionToBlock(
-  section: ParsedSection,
-  id: string,
-): PromptBlock {
+function sectionToBlock(section: ParsedSection, id: string, presets: BlockPreset[]): PromptBlock {
+  const natural = naturalBlockRole(section.kind, section.presetId, presets);
+  const explicitOverride =
+    section.messageRole && section.messageRole !== natural ? section.messageRole : undefined;
+
   if (section.kind === 'custom') {
     return {
       id,
@@ -112,12 +199,14 @@ function sectionToBlock(
       presetId: section.presetId,
       label: section.label || section.heading,
       color: section.color || 'ochre',
+      ...(explicitOverride ? { messageRole: explicitOverride } : {}),
     };
   }
   return {
     id,
     kind: section.kind,
     text: section.text,
+    ...(explicitOverride ? { messageRole: explicitOverride } : {}),
   };
 }
 
@@ -127,8 +216,17 @@ export function parseFullTextPrompt(
   presets: BlockPreset[],
 ): FullTextParseResult {
   const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
-  const rawSections: { rawLine?: string; heading?: string; lines: string[] }[] = [];
-  let current: { rawLine?: string; heading?: string; lines: string[] } = { lines: [] };
+  type RawSection = {
+    rawLine?: string;
+    heading?: string;
+    explicitRole?: MessageRole;
+    scopeRole?: MessageRole;
+    lines: string[];
+  };
+  const rawSections: RawSection[] = [];
+  let activeScopeRole: MessageRole | undefined;
+  let hasRoleMarkers = false;
+  let current: RawSection = { scopeRole: undefined, lines: [] };
   let fenceChar: string | null = null;
   let fenceLen = 0;
 
@@ -148,14 +246,29 @@ export function parseFullTextPrompt(
     }
 
     if (!fenceChar) {
+      const markerRole = parseMessageRoleMarker(line);
+      if (markerRole) {
+        hasRoleMarkers = true;
+        if (current.heading || current.lines.some((l) => l.trim())) {
+          rawSections.push(current);
+        }
+        activeScopeRole = markerRole;
+        current = { scopeRole: activeScopeRole, lines: [] };
+        continue;
+      }
+
       const headingMatch = line.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*$/);
       if (headingMatch) {
         if (current.heading || current.lines.some((l) => l.trim())) {
           rawSections.push(current);
         }
+        const extracted = extractHeadingAndRole(headingMatch[2]);
+        if (extracted.explicitRole) hasRoleMarkers = true;
         current = {
           rawLine: line,
-          heading: headingMatch[2].trim(),
+          heading: extracted.heading,
+          explicitRole: extracted.explicitRole,
+          scopeRole: activeScopeRole,
           lines: [],
         };
         continue;
@@ -174,6 +287,7 @@ export function parseFullTextPrompt(
   for (let i = 0; i < rawSections.length; i++) {
     const sec = rawSections[i];
     const body = sec.lines.join('\n').replace(/^\n+/, '').replace(/\s+$/, '');
+    const inheritedRole = sec.explicitRole ?? sec.scopeRole;
 
     if (!sec.heading) {
       if (body.trim()) {
@@ -182,6 +296,7 @@ export function parseFullTextPrompt(
           kind: 'text',
           heading: blockLabels.text,
           text: body,
+          messageRole: inheritedRole,
           matchedBy: 'preamble',
         });
       }
@@ -202,6 +317,7 @@ export function parseFullTextPrompt(
         presetId: matchedPreset.id,
         label: matchedPreset.name,
         color: matchedPreset.color,
+        messageRole: inheritedRole ?? matchedPreset.messageRole,
         matchedBy: 'preset',
       });
       continue;
@@ -215,6 +331,7 @@ export function parseFullTextPrompt(
         heading: blockLabels[builtinKind],
         rawHeadingLine: sec.rawLine,
         text: body,
+        messageRole: inheritedRole ?? defaultBlockMessageRole(builtinKind),
         matchedBy: 'builtin',
       });
       continue;
@@ -233,6 +350,7 @@ export function parseFullTextPrompt(
         presetId: existingCustom.presetId,
         label: existingCustom.label || norm,
         color: existingCustom.color || 'ochre',
+        messageRole: inheritedRole ?? existingCustom.messageRole,
         matchedBy: 'existing-custom',
       });
       continue;
@@ -246,12 +364,14 @@ export function parseFullTextPrompt(
         heading: blockLabels.text,
         rawHeadingLine: sec.rawLine,
         text: sec.rawLine || `## ${norm}`,
+        messageRole: inheritedRole,
         matchedBy: 'preamble',
       });
       continue;
     }
 
     const suggestedColor = PRESET_TONES[unmatchedCount % PRESET_TONES.length];
+    const suggestedRole = inheritedRole ?? suggestMessageRole(norm);
     unmatchedCount += 1;
     sections.push({
       index: sections.length,
@@ -261,6 +381,7 @@ export function parseFullTextPrompt(
       text: body,
       label: norm.slice(0, 24) || '自定义模块',
       color: suggestedColor,
+      messageRole: suggestedRole,
       matchedBy: 'unmatched',
     });
   }
@@ -294,13 +415,14 @@ export function parseFullTextPrompt(
       unmatched: [],
       matchedLabels: [],
       overflowMerged: false,
+      hasRoleMarkers,
     };
   }
 
   const usedIds = new Set<number>();
   const previewBlocks = sections.map((sec) => {
     const id = matchExistingId(sec, existingBlocks, usedIds);
-    return sectionToBlock(sec, id);
+    return sectionToBlock(sec, id, presets);
   });
 
   const unmatched: UnmatchedHeading[] = sections
@@ -310,6 +432,7 @@ export function parseFullTextPrompt(
       heading: s.heading,
       text: s.text,
       suggestedColor: s.color || 'ochre',
+      suggestedRole: s.messageRole || 'user',
     }));
 
   const matchedLabels = [
@@ -327,6 +450,7 @@ export function parseFullTextPrompt(
     unmatched,
     matchedLabels,
     overflowMerged,
+    hasRoleMarkers,
   };
 }
 
@@ -336,6 +460,7 @@ export interface HeadingResolution {
   name: string;
   color: ShelfColor;
   template: string;
+  messageRole: MessageRole;
 }
 
 export function applyHeadingResolutions(
@@ -343,15 +468,17 @@ export function applyHeadingResolutions(
   resolutions: HeadingResolution[],
   createdPresetsByIndex: Record<number, BlockPreset>,
   existingBlocks: PromptBlock[],
+  presets: BlockPreset[] = [],
 ): PromptBlock[] {
   const resolutionMap = new Map(resolutions.map((r) => [r.index, r]));
+  const allPresets = [...presets, ...Object.values(createdPresetsByIndex)];
   const usedIds = new Set<number>();
   const out: PromptBlock[] = [];
 
   for (const sec of parsed.sections) {
     if (sec.matchedBy !== 'unmatched') {
       const id = matchExistingId(sec, existingBlocks, usedIds);
-      out.push(sectionToBlock(sec, id));
+      out.push(sectionToBlock(sec, id, allPresets));
       continue;
     }
 
@@ -360,11 +487,17 @@ export function applyHeadingResolutions(
       const textContent = sec.text.trim()
         ? `${sec.rawHeadingLine || `## ${sec.heading}`}\n${sec.text}`
         : sec.rawHeadingLine || `## ${sec.heading}`;
+      const keepRole = res?.messageRole ?? sec.messageRole ?? 'user';
       const prev = out[out.length - 1];
-      if (prev && prev.kind === 'text') {
+      if (prev && prev.kind === 'text' && resolveBlockMessageRole(prev, allPresets) === keepRole) {
         prev.text = prev.text.trim() ? `${prev.text}\n\n${textContent}` : textContent;
       } else {
-        out.push({ id: uid(), kind: 'text', text: textContent });
+        out.push({
+          id: uid(),
+          kind: 'text',
+          text: textContent,
+          ...(keepRole !== 'user' ? { messageRole: keepRole } : {}),
+        });
       }
       continue;
     }
@@ -373,6 +506,8 @@ export function applyHeadingResolutions(
       const created = createdPresetsByIndex[sec.index];
       const label = (created?.name || res.name || sec.heading).trim().slice(0, 24) || '自定义模块';
       const color = created?.color || res.color || sec.color || 'ochre';
+      const presetRole = created?.messageRole || res.messageRole || sec.messageRole || 'user';
+      const chosenRole = res.messageRole || presetRole;
       const id = matchExistingId({ kind: 'custom', label }, existingBlocks, usedIds);
       out.push({
         id,
@@ -381,11 +516,13 @@ export function applyHeadingResolutions(
         presetId: created?.id,
         label,
         color,
+        ...(chosenRole !== presetRole ? { messageRole: chosenRole } : {}),
       });
       continue;
     }
 
     const label = (res.name || sec.heading).trim().slice(0, 24) || '自定义模块';
+    const docRole = res.messageRole || sec.messageRole || 'user';
     const id = matchExistingId({ kind: 'custom', label }, existingBlocks, usedIds);
     out.push({
       id,
@@ -393,6 +530,7 @@ export function applyHeadingResolutions(
       text: sec.text,
       label,
       color: res.color || sec.color || 'ochre',
+      ...(docRole !== 'user' ? { messageRole: docRole } : {}),
     });
   }
 
