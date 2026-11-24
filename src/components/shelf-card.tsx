@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { BrassPull, Icon } from './icons';
 import type { Shelf } from '@/lib/archive-types';
 export function ShelfCard({
@@ -20,7 +21,7 @@ export function ShelfCard({
       className={`shelf-card tone-${shelf.color} ${opening ? 'is-opening' : ''}`}
       onClick={onClick}
       aria-label={`打开${shelf.name}货架，${folders} 个文件夹，${documents} 篇提示词`}
-      style={{ animationDelay: `${number * 65}ms` }}
+      style={{ '--card-index': number } as CSSProperties}
     >
       <div className="drawer-front">
         <div className="drawer-inset" />

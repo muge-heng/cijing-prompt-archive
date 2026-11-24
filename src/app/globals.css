@@ -415,6 +415,20 @@ button .icon {
     transform: translateY(2px) perspective(900px) rotateX(2.5deg) scale(1.022);
   }
 }
+@keyframes drawer-pull-cinematic {
+  0% {
+    transform: translateY(-3px) perspective(900px) rotateX(0deg) scale(1);
+  }
+  42% {
+    transform: translateY(-6px) perspective(900px) translateZ(10px) rotateX(4.2deg) scale(1.03);
+  }
+  75% {
+    transform: translateY(-9px) perspective(900px) translateZ(16px) rotateX(3.8deg) scale(1.028);
+  }
+  100% {
+    transform: translateY(-7px) perspective(900px) translateZ(14px) rotateX(3.2deg) scale(1.025);
+  }
+}
 @keyframes folder-sheet-open {
   0% {
     transform: translateY(-3px) scale(1);
@@ -424,6 +438,17 @@ button .icon {
   }
   100% {
     transform: translateY(-7px) scale(1.026) rotate(-0.4deg);
+  }
+}
+@keyframes folder-sheet-cinematic {
+  0% {
+    transform: translateY(-3px) perspective(900px) rotateX(0deg) scale(1);
+  }
+  52% {
+    transform: translateY(-13px) perspective(900px) rotateX(6deg) scale(1.036) rotate(-0.8deg);
+  }
+  100% {
+    transform: translateY(-10px) perspective(900px) rotateX(4.5deg) scale(1.028) rotate(-0.5deg);
   }
 }
 @keyframes view-unfold {
@@ -480,6 +505,16 @@ button .icon {
   from {
     opacity: 0;
     transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes workbench-in-cinematic {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.965);
   }
   to {
     opacity: 1;

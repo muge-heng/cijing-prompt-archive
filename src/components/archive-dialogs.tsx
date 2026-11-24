@@ -5,7 +5,7 @@ import { Dialog, Overlay } from './dialog';
 import { Icon } from './icons';
 import { PaperGlyph } from './document-list';
 import type { ArchiveMutation } from './editor';
-export type MotionLevel = 'rich' | 'gentle' | 'off';
+export type MotionLevel = 'cinematic' | 'rich' | 'gentle' | 'off';
 export interface Preferences {
   theme: 'light' | 'dark';
   entrance: boolean;
@@ -187,7 +187,8 @@ function Switch({ checked, onChange, label }: { checked: boolean; onChange: () =
   );
 }
 const motionModes: { level: MotionLevel; label: string; hint: string }[] = [
-  { level: 'rich', label: '丰富拟物', hint: '抽屉拉出、文件夹翻页、层叠入场' },
+  { level: 'cinematic', label: '舒缓典藏', hint: '放慢节奏，拉长抽屉推拉、光影扫过与层叠翻页' },
+  { level: 'rich', label: '丰富拟物', hint: '抽屉拉出、文件夹翻页、层叠入场（默认）' },
   { level: 'gentle', label: '轻柔克制', hint: '短促淡入过渡，减弱视差与等待' },
   { level: 'off', label: '关闭动效', hint: '立即切换页面，无动态效果' },
 ];
@@ -203,7 +204,7 @@ export function Settings({
   replay: () => void;
 }) {
   const motionLevel: MotionLevel = prefs.motionLevel || (prefs.motion ? 'rich' : 'off');
-  const currentMotion = motionModes.find((m) => m.level === motionLevel) || motionModes[0];
+  const currentMotion = motionModes.find((m) => m.level === motionLevel) || motionModes[1];
   return (
     <Dialog title="仓库设置" eyebrow="WORKSPACE PREFERENCES" onClose={onClose}>
       <div className="settings-body">

@@ -26,7 +26,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         )}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var p=JSON.parse(localStorage.getItem('archive-preferences')||'{}');if(p.theme==='dark')document.documentElement.dataset.theme='dark';var m=p.motionLevel||(p.motion===false?'off':'rich');if(m==='off'||m==='gentle')document.documentElement.dataset.motion=m}catch(e){}`,
+            __html: `try{var p=JSON.parse(localStorage.getItem('archive-preferences')||'{}');if(p.theme==='dark')document.documentElement.dataset.theme='dark';var m=p.motionLevel||(p.motion===false?'off':'rich');if(m==='off'||m==='gentle'||m==='cinematic')document.documentElement.dataset.motion=m}catch(e){}`,
           }}
         />
       </head>

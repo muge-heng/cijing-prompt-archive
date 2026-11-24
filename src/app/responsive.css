@@ -618,6 +618,9 @@
   .archive-select-menu {
     min-width: 150px;
   }
+  .motion-segmented {
+    grid-template-columns: repeat(2, 1fr);
+  }
   .motion-segmented button {
     font-size: 10.5px;
     padding: 4px;
@@ -887,6 +890,113 @@
   .folder-card:hover {
     transform: none;
   }
+}
+html[data-motion='cinematic'] button,
+html[data-motion='cinematic'] .nav-item,
+html[data-motion='cinematic'] .sub-nav-item,
+html[data-motion='cinematic'] .document-row,
+html[data-motion='cinematic'] .shelf-nav-row,
+html[data-motion='cinematic'] .archive-select-trigger,
+html[data-motion='cinematic'] .index-ticket {
+  transition-duration: 0.34s;
+}
+html[data-motion='cinematic'] .shelf-sublist-wrap,
+html[data-motion='cinematic'] .shelf-expand-btn .icon,
+html[data-motion='cinematic'] .nav-chevron,
+html[data-motion='cinematic'] .archive-select-chevron,
+html[data-motion='cinematic'] .workspace-profile > .icon,
+html[data-motion='cinematic'] .ticket-toggle-chevron,
+html[data-motion='cinematic'] .add-block-button > .icon:last-child {
+  transition-duration: 0.44s;
+}
+html[data-motion='cinematic'] .sidebar {
+  transition-duration: 0.52s;
+}
+html[data-motion='cinematic'] .shelf-card {
+  transition-duration: 0.62s;
+  transition-timing-function: cubic-bezier(0.16, 0.72, 0.22, 1);
+}
+html[data-motion='cinematic'] .shelf-card:hover {
+  transform: translateY(-5px) scale(1.008);
+  box-shadow:
+    0 12px 22px #26251924,
+    0 0 0 1px var(--line);
+}
+html[data-motion='cinematic'] .brass-pull {
+  transition-duration: 0.48s;
+}
+html[data-motion='cinematic'] .folder-card {
+  transition-duration: 0.56s;
+  transition-timing-function: cubic-bezier(0.16, 0.72, 0.22, 1);
+}
+html[data-motion='cinematic'] .folder-card:hover {
+  transform: translateY(-5px);
+}
+html[data-motion='cinematic'] .folder-tab {
+  transition-duration: 0.48s;
+}
+html[data-motion='cinematic'] .folder-card:hover .folder-tab {
+  transform: translateY(-2.5px);
+}
+html[data-motion='cinematic'] .room-entering .welcome-hero::after {
+  animation: archive-light 2.15s cubic-bezier(0.2, 0.58, 0.26, 1) both;
+  opacity: 0.78;
+}
+html[data-motion='cinematic'] .room-entering .hero-copy {
+  animation: appear-up 1.25s cubic-bezier(0.14, 0.76, 0.24, 1) both;
+}
+html[data-motion='cinematic'] .room-entering .hero-art {
+  animation: ink-in 1.95s ease-out both;
+}
+html[data-motion='cinematic'] .room-entering .shelf-card {
+  animation: drawer-in 1.15s cubic-bezier(0.18, 0.72, 0.22, 1) both;
+  animation-delay: calc(var(--card-index, 0) * 115ms + 110ms);
+}
+html[data-motion='cinematic'] .room-entering .recent-section {
+  animation: appear-up 1.05s 0.28s cubic-bezier(0.16, 0.74, 0.24, 1) both;
+}
+html[data-motion='cinematic'] .shelf-card.is-opening {
+  animation: drawer-pull-cinematic 0.44s cubic-bezier(0.16, 0.8, 0.24, 1) forwards;
+}
+html[data-motion='cinematic'] .folder-card.is-opening {
+  animation: folder-sheet-cinematic 0.42s cubic-bezier(0.16, 0.8, 0.24, 1) forwards;
+}
+html[data-motion='cinematic'] .main-content.view-transition-shelf-open .collection-heading {
+  animation: view-unfold 0.62s cubic-bezier(0.16, 0.74, 0.22, 1) both;
+}
+html[data-motion='cinematic'] .main-content.view-transition-shelf-open .folder-card {
+  animation: folder-rise 0.68s cubic-bezier(0.16, 0.74, 0.22, 1) both;
+  animation-delay: calc(var(--card-index, 0) * 85ms + 40ms);
+}
+html[data-motion='cinematic'] .main-content.view-transition-shelf-open .library-section {
+  animation: appear-up 0.64s 0.18s cubic-bezier(0.16, 0.74, 0.22, 1) both;
+}
+html[data-motion='cinematic'] .main-content.view-transition-folder-open .collection-heading {
+  animation: view-unfold 0.6s cubic-bezier(0.16, 0.74, 0.22, 1) both;
+}
+html[data-motion='cinematic'] .main-content.view-transition-folder-open .document-row {
+  animation: doc-sheet-in 0.56s cubic-bezier(0.16, 0.74, 0.22, 1) both;
+  animation-delay: calc(var(--row-index, 0) * 58ms + 30ms);
+}
+html[data-motion='cinematic'] .main-content.view-transition-switch {
+  animation: view-switch-in 0.48s cubic-bezier(0.18, 0.72, 0.24, 1) both;
+}
+html[data-motion='cinematic'] .overlay {
+  animation: fade-in 0.36s ease both;
+}
+html[data-motion='cinematic'] .dialog .overlay-panel {
+  animation: paper-in 0.52s cubic-bezier(0.16, 0.74, 0.22, 1) both;
+}
+html[data-motion='cinematic'] .editor-overlay .overlay-panel {
+  animation: workbench-in-cinematic 0.56s cubic-bezier(0.16, 0.74, 0.22, 1) both;
+}
+html[data-motion='cinematic'] .prompt-block,
+html[data-motion='cinematic'] .module-palette-panel {
+  animation-duration: 0.48s;
+}
+html[data-motion='cinematic'] .archive-select-menu,
+html[data-motion='cinematic'] .workspace-popover {
+  animation: select-pop 0.36s cubic-bezier(0.16, 0.74, 0.22, 1) both;
 }
 html[data-motion='gentle'] .shelf-card,
 html[data-motion='gentle'] .folder-card {

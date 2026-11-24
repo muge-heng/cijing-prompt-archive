@@ -130,7 +130,7 @@ export function ArchiveApp({
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
   const shouldUseRichMotion = () =>
-    prefs.motionLevel === 'rich' &&
+    (prefs.motionLevel === 'rich' || prefs.motionLevel === 'cinematic') &&
     typeof window !== 'undefined' &&
     !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const openShelfFromCard = (id: string) => {
@@ -142,10 +142,13 @@ export function ArchiveApp({
     if (navTimerRef.current) clearTimeout(navTimerRef.current);
     setOpeningFolderId(null);
     setOpeningShelfId(id);
-    navTimerRef.current = setTimeout(() => {
-      navTimerRef.current = null;
-      navigate('shelf', id, 'shelf-open');
-    }, 220);
+    navTimerRef.current = setTimeout(
+      () => {
+        navTimerRef.current = null;
+        navigate('shelf', id, 'shelf-open');
+      },
+      prefs.motionLevel === 'cinematic' ? 420 : 220,
+    );
   };
   const openFolderFromCard = (id: string) => {
     if (!shouldUseRichMotion()) {
@@ -156,10 +159,13 @@ export function ArchiveApp({
     if (navTimerRef.current) clearTimeout(navTimerRef.current);
     setOpeningShelfId(null);
     setOpeningFolderId(id);
-    navTimerRef.current = setTimeout(() => {
-      navTimerRef.current = null;
-      navigate('folder', id, 'folder-open');
-    }, 210);
+    navTimerRef.current = setTimeout(
+      () => {
+        navTimerRef.current = null;
+        navigate('folder', id, 'folder-open');
+      },
+      prefs.motionLevel === 'cinematic' ? 400 : 210,
+    );
   };
   useEffect(() => {
     // Restore device-only state on the first browser frame; the server snapshot stays deterministic.
@@ -169,7 +175,7 @@ export function ArchiveApp({
         const stored = JSON.parse(localStorage.getItem('archive-preferences') || '{}');
         const rawLevel = stored.motionLevel;
         const motionLevel: MotionLevel =
-          rawLevel === 'rich' || rawLevel === 'gentle' || rawLevel === 'off'
+          rawLevel === 'cinematic' || rawLevel === 'rich' || rawLevel === 'gentle' || rawLevel === 'off'
             ? rawLevel
             : stored.motion === false
               ? 'off'
@@ -223,10 +229,13 @@ export function ArchiveApp({
   }, []);
   useEffect(() => {
     if (entering) {
-      const timer = setTimeout(() => setEntering(false), 1400);
+      const timer = setTimeout(
+        () => setEntering(false),
+        prefs.motionLevel === 'cinematic' ? 2350 : 1400,
+      );
       return () => clearTimeout(timer);
     }
-  }, [entering, entry]);
+  }, [entering, entry, prefs.motionLevel]);
   useEffect(() => {
     const keys = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {

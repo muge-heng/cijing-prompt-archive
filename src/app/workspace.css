@@ -901,6 +901,7 @@
 .shelf-card.is-opening {
   z-index: 5;
   animation: drawer-pull-open 0.24s cubic-bezier(0.18, 0.75, 0.28, 1) forwards;
+  animation-delay: 0ms !important;
 }
 .shelf-card.is-opening .drawer-front {
   box-shadow:
@@ -1581,6 +1582,7 @@
 }
 .room-entering .shelf-card {
   animation: drawer-in 0.7s cubic-bezier(0.2, 0.65, 0.25, 1) both;
+  animation-delay: calc(var(--card-index, 0) * 65ms);
 }
 .room-entering .recent-section {
   animation: appear-up 0.65s 0.12s both;
