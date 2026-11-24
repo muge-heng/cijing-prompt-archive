@@ -209,7 +209,7 @@ flowchart TD
     Modals --> DocumentEditor["DocumentEditor\n居中双栏工作台 · 拖拽排序 · 快捷变量 · 样片与多格式"]
     Modals --> BackupCard["ArchiveBackupDialog / ArchiveCardDialog\n馆藏 JSON 导入导出 · .md 导入 · PNG 卡片"]
     Modals --> SearchDialog["SearchDialog\n跨货架/文件夹/全文检索"]
-    Modals --> Settings["Settings\n双主题 · 入仓/界面动效开关"]
+    Modals --> Settings["Settings\n双主题 · 四档动效 · 四档字号调节"]
     Modals --> EntityDialog["EntityDialog\n新建/编辑货架与文件夹"]
     Modals --> ContextMenu["文档上下文菜单（含导出/制卡） + 左下角空间菜单 + Toast"]
 ```
@@ -239,12 +239,12 @@ flowchart TD
 - **Token 与双主题系统（`src/app/globals.css`）**：
   - 表面与文字阶梯：`--paper`、`--sidebar`、`--panel`、`--raised`、`--inset`、`--ink`、`--muted`、`--faint`、`--line`、`--line-soft`、`--accent`、`--button`、`--gold`、`--brass`、`--danger`。
   - 五种货架木纹与标签色系：`.tone-moss`（苔绿）、`.tone-walnut`（胡桃）、`.tone-slate`（岩蓝）、`.tone-wine`（酒红）、`.tone-ochre`（黄铜），在 `html[data-theme='dark']` 下均配有低饱和度适配变量。
-  - 首屏防闪烁：`layout.tsx` 的 `<head>` 同步执行内联脚本读取 `localStorage['archive-preferences']`，在 React Hydration 前写入 `document.documentElement.dataset.theme` 与 `dataset.motion`。
+  - 首屏防闪烁：`layout.tsx` 的 `<head>` 同步执行内联脚本读取 `localStorage['archive-preferences']`，在 React Hydration 前写入 `document.documentElement.dataset.theme`、`dataset.motion` 与 `dataset.fontSize`。
 - **轻拟物质感细节（`src/app/workspace.css`）**：
   - 全局叠印 SVG 纸张噪点滤镜（`grain.svg`）与木纹滤镜（`wood.svg`），配合 CSS 渐变高光、内阴影实现实体木质抽屉、一字螺丝、镶嵌纸质标签框与铜版画质感欢迎铭牌。
   - `BrassPull`（`src/components/icons.tsx`）为每个货架生成独立的 `<linearGradient id="metal-${id}">` 与 `plate-${id}`，悬停时产生位移与阴影深度变化。
-- **动效与无障碍降级（`src/app/responsive.css`）**：
-  - 欢迎光影扫过（`archive-light`）、抽屉 3D 翻入（`drawer-in`）、抽屉拉开（`drawer-pull-open`）、文件夹翻页（`folder-sheet-open`）与目标视图层叠展开（`view-unfold` / `folder-rise` / `doc-sheet-in`）均支持在设置中按「丰富拟物 / 轻柔克制 / 关闭动效」三档调节（对应 `html[data-motion='rich' | 'gentle' | 'off']`），入仓过渡可独立开关。
+- **动效、字号缩放与无障碍降级（`src/app/responsive.css`）**：
+  - 欢迎光影扫过（`archive-light`）、抽屉 3D 翻入（`drawer-in`）、抽屉拉开（`drawer-pull-open` / `drawer-pull-cinematic`）、文件夹翻页（`folder-sheet-open` / `folder-sheet-cinematic`）与目标视图层叠展开（`view-unfold` / `folder-rise` / `doc-sheet-in`）支持在设置中按「舒缓典藏 / 丰富拟物（默认）/ 轻柔克制 / 关闭动效」四档调节（对应 `html[data-motion='cinematic' | 'rich' | 'gentle' | 'off']`），入仓过渡可独立开关；字号支持「小号 / 标准 / 大号 / 超大」四档调节（通过 `--font-scale` 与 `--content-scale` 联动界面与编辑器文本，并自适应校准预览信笺行线间距，对应 `html[data-font-size='small' | 'standard' | 'large' | 'xlarge']`）。
   - `@media (prefers-reduced-motion: reduce)` 与 `html[data-motion='off']` 统一将过渡与动画时长压缩至 `0.001ms` 并禁用悬停位移。
 - **响应式断点**：覆盖 `>=1550px`（宽屏展开）、`901px–1190px`（紧凑边栏）、`<=900px`（抽屉式侧栏 + 焦点陷阱）、`<=670px`（货架横向 `scroll-snap` 滑轨、文档列表三列精简）、`<=385px` 及低高度视口（`<=740px` / `<=630px` 自动隐藏馆藏索引票据）。
 
