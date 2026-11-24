@@ -275,7 +275,7 @@ flowchart TD
 2. **模块拆分与可维护性**：
    - `src/components/archive-app.tsx` 达 957 行，集成了视图路由、数据变更队列、筛选排序、侧边栏、主内容区、上下文菜单、确认弹窗与 Toast。后续迭代（如引入标签、版本历史、批量操作）建议拆分为 `Sidebar`、`Topbar`、`OverviewSection`、`CollectionSection`、`ContextMenu` 与自定义 Hook `useArchiveState` / `useArchivePreferences`。
 3. **元数据与工程细节**：
-   - `package.json` 的 `"name"` 仍为模板默认值 `"nextjs-postgresql-template"`，可按规范更新为 `"cijing-prompt-archive"`。
+   - `package.json` 已于 `v1.0.0` 正式交付版中规范包名为 `"cijing-prompt-archive"` 并标定版本号 `"1.0.0"`。
    - `src/lib/archive-seed.ts` 在模块首次执行 `initialArchive()` 时基于 `Date.now()` 计算相对时间；若在静态导出模式下用于 SSR 预渲染与客户端水合，需确保首屏时间戳确定性（如采用固定基准时间并在客户端挂载后更新相对时间），避免 React Hydration 不一致警告。
 4. **已落地与后续演进方向**：
    - `v0.4.0` 已落地 JSON/Markdown 备份导入导出、变量默认值语法与调试样片、多格式输出与 Token 估算、模块拖拽排序、档案修订签 Diff 回滚及 PNG 馆藏卡片导出。
