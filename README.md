@@ -1,7 +1,7 @@
 # 词境仓库 · Prompt Archive
 
 > **以纸张、木纹、黄铜索引柜为视觉隐喻的轻拟物多层级提示词管理与本地调试工作台**  
-> 中国矿业大学首届“智核杯”AI创作大赛 · 赛道二（AI 网站创作赛道）作品｜参赛队名：**DeepSleep**｜成员：**林恒（09245213）**
+> 中国矿业大学首届“智核杯”AI创作大赛 · 赛道二（AI 网站创作赛道）作品
 
 ![Version](https://img.shields.io/badge/version-v1.0.0-4a5d47?style=flat-square)
 ![Next.js](https://img.shields.io/badge/Next.js-16.4.5-2c3a28?style=flat-square)
